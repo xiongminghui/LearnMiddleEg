@@ -21,6 +21,8 @@ export const WORDS = [
   {id:'balance',definition:'A steady or fair state between different things; to keep things in that state.',ipa:'/ˈbæləns/',pos:'n. / v.',meaning:'平衡；使平衡',theme:'protect',sentence:'We need to keep a balance between work and rest.',translation:'我们需要保持工作与休息之间的平衡。',family:'balanced 均衡的',note:'keep a balance between ... and ... 保持……和……之间的平衡。',memory:'像照顾幼苗需要适量的水和光，学习也需要平衡。'}
 ];
 export const DEFAULT_WORDS=WORDS.slice();
+// Separate demo banks. Publishing one bank never changes the other defaults.
+export const DEFAULT_MODULE_BANKS={intro:DEFAULT_WORDS.slice(0,5),recognize:DEFAULT_WORDS.slice(5,10),spell:DEFAULT_WORDS.slice(10,14),listen:DEFAULT_WORDS.slice(14,18)};
 export const catalogState={banks:typeof window!=='undefined'&&window.wordIslandPublished?Object.fromEntries(Object.entries(window.wordIslandPublished).map(([k,v])=>[k,validateWords(v)])):{},error:typeof window!=='undefined'?window.wordIslandCatalogError:null};
 export const MODULE_BANKS=catalogState.banks;
 for(const words of Object.values(MODULE_BANKS))for(const word of words)if(!WORDS.some(w=>w.id===word.id))WORDS.push(word);

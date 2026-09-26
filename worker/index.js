@@ -33,7 +33,7 @@ export default {
       }
       if(request.method!=='PUT')return json({error:'method_not_allowed'},405);
       const origin=request.headers.get('Origin');if(origin&&origin!==url.origin)return json({error:'origin_not_allowed'},403);
-      let body,banks;try{body=await limitedJSON(request,1048576);if(!Number.isInteger(body.revision)||body.revision<0||!body.banks||Object.keys(body.banks).some(k=>!Object.hasOwn(MODULES,k)))throw Error('词库格式不正确');banks=Object.fromEntries(Object.entries(body.banks).map(([k,v])=>[k,validateWords(v)]));}catch(e){return json({error:e.message||'导入格式不正确'},400);}
+      let body,banks;try{body=await limitedJSON(request,1048576);if(!Number.isInteger(body.revision)||body.revision<0||!body.banks||Object.keys(body.banks).some(k=>!Object.hasOwn(MODULES,k)))throw Error('词库格式不正确');banks=Object.fromEntries(Object.entries(body.banks).map(([k,v])=>[k,validateWords(v)]));if(banks.recognize&&new Set(banks.recognize.map(w=>w.meaning)).size<2)throw Error('英译中选择需要至少 2 个中文释义不同的单词');}catch(e){return json({error:e.message||'导入格式不正确'},400);}
       try{const result=await env.DB.prepare("UPDATE shared_catalog SET banks_json = ?, revision = revision + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = 1 AND revision = ?").bind(JSON.stringify(banks),body.revision).run();if(!result.meta?.changes)return json({error:'词库已被其他管理员更新，请重新登录后再导入'},409);return json({revision:body.revision+1,banks});}catch{return json({error:'发布失败，原词库保持不变'},503);}
     }
     if(url.pathname==='/api/status'&&request.method==='GET')return json({storage:env.DB?'postgres':'local',version:1});

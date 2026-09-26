@@ -22,3 +22,23 @@ test('admin API enforces password, validation and revision conflict',async()=>{
  assert.equal((await worker.fetch(request('PUT',{revision:0,banks:{spell:[WORDS[0]]}}),env)).status,409);
  changed=1;assert.equal((await worker.fetch(request('PUT',{revision:0,banks:{spell:[WORDS[0]]}}),env)).status,200);
 });
+
+test('demo module banks are separate and each lesson uses only its own words',async()=>{
+ const {DEFAULT_MODULE_BANKS}=await import('../public/data/words.js');
+ const all=Object.values(DEFAULT_MODULE_BANKS).flat().map(w=>w.id);
+ assert.equal(new Set(all).size,all.length);
+ assert.deepEqual(Object.values(DEFAULT_MODULE_BANKS).map(words=>words.length),[5,5,4,4]);
+ for(const [kind,words] of Object.entries(DEFAULT_MODULE_BANKS)){
+  const session=createModuleSession(DEFAULT_MODULE_BANKS,{},kind);
+  assert.equal(session.queue.length,words.length);
+  assert.ok(session.queue.every(t=>t.kind===kind&&words.some(w=>w.id===t.wordId)));
+ }
+});
+
+test('recognition bank requires distinct meanings so its choices stay meaningful',async()=>{
+ let wrote=false;
+ const env={ADMIN_PASSWORD:'test-password',DB:{prepare(){wrote=true;throw Error('must not write');}}};
+ const request=new Request('https://example.com/api/admin/catalog',{method:'PUT',headers:{Authorization:'Bearer test-password','Content-Type':'application/json'},body:JSON.stringify({revision:0,banks:{recognize:[WORDS[0]]}})});
+ assert.equal((await worker.fetch(request,env)).status,400);
+ assert.equal(wrote,false);
+});
