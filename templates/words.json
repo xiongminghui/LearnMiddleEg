@@ -10,7 +10,8 @@
     "translation": "我们决定在日落前探索这片森林。",
     "family": "explorer 探险者 · exploration 探索",
     "note": "explore 强调探索过程；discover 强调发现结果。",
-    "memory": "沿着未知的小路走进去，把“探索”的动作和单词连起来。"
+    "memory": "沿着未知的小路走进去，把“探索”的动作和单词连起来。",
+    "audioUrl": ""
   },
   {
     "id": "challenge",
@@ -23,7 +24,8 @@
     "translation": "学习一门新语言是一项挑战。",
     "family": "challenging 有挑战性的",
     "note": "take on a challenge 接受挑战。",
-    "memory": "眼前的陡坡是一项挑战，每向上一步都在克服它。"
+    "memory": "眼前的陡坡是一项挑战，每向上一步都在克服它。",
+    "audioUrl": ""
   },
   {
     "id": "protect",
@@ -36,7 +38,8 @@
     "translation": "我们应该保护野生动物，使它们免受危险。",
     "family": "protection 保护 · protective 保护的",
     "note": "protect ... from ...：保护……免受……。",
-    "memory": "用双手护住幼苗，想一想你想保护的人或事物。"
+    "memory": "用双手护住幼苗，想一想你想保护的人或事物。",
+    "audioUrl": ""
   },
   {
     "id": "discover",
@@ -49,6 +52,7 @@
     "translation": "我们希望在旅途中发现一片隐秘的湖泊。",
     "family": "discovery 发现",
     "note": "discover 发现已有但未知的事物；invent 发明新事物。",
-    "memory": "走过树林后发现一片湖，把意外发现的瞬间记住。"
+    "memory": "走过树林后发现一片湖，把意外发现的瞬间记住。",
+    "audioUrl": ""
   }
 ]

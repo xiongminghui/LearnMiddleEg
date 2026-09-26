@@ -8,8 +8,9 @@ const setup=async()=>{const mem=newDb({noAstCoverageCheck:true});mem.public.regi
 test('PostgreSQL migration, publish, revision guard and duplicate event persistence',async()=>{
  const {pool,db}=await setup();try{await migrate(pool);const env={DB:db,ADMIN_PASSWORD:'testing-secret'};
  const req=(path,method='GET',body,token='testing-secret')=>new Request('https://example.com'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
- const publish=await worker.fetch(req('/api/admin/catalog','PUT',{revision:0,banks:{spell:[WORDS[0]]}}),env);assert.equal(publish.status,200);
+ const publish=await worker.fetch(req('/api/admin/catalog','PUT',{revision:0,banks:{spell:[{...WORDS[0],audioUrl:'/audio/explore.mp3'}]}}),env);assert.equal(publish.status,200);
  const catalog=await (await worker.fetch(req('/api/catalog'),env)).json();assert.equal(catalog.banks.spell[0].id,'explore');assert.equal(catalog.revision,1);
+ assert.equal(catalog.banks.spell[0].audioUrl,'/audio/explore.mp3');
  assert.equal((await worker.fetch(req('/api/admin/catalog','PUT',{revision:0,banks:{}}),env)).status,409);
  const e={id:crypto.randomUUID(),sessionId:crypto.randomUUID(),wordId:'explore',eventType:'answered',exerciseType:'listen',result:'correct',assisted:false,occurredAt:Date.now(),latencyMs:1200};
  for(let i=0;i<2;i++)assert.equal((await worker.fetch(req('/api/events','POST',{events:[e]},'a'.repeat(64)),env)).status,200);

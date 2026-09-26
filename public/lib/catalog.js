@@ -1,6 +1,11 @@
 export const MODULES={intro:'单词认知',recognize:'英译中选择',spell:'中译英拼写',listen:'听音拼写'};
 export const CATALOG_KEY='word-island-module-banks-v1';
-const FIELDS=['id','ipa','meaning','definition','sentence','translation','pos','theme','family','note','memory'];
+const FIELDS=['id','ipa','meaning','definition','sentence','translation','pos','theme','family','note','memory','audioUrl'];
+function validAudioURL(value){
+ if(!value)return true;
+ if(/[\\\s]/.test(value))return false;
+ try{const url=new URL(value,'https://word-island.invalid');return url.protocol==='https:'&&!url.username&&!url.password&&(value.startsWith('https://')||(value.startsWith('/audio/')&&url.origin==='https://word-island.invalid'&&url.pathname.startsWith('/audio/')));}catch{return false;}
+}
 export function parseCSV(text){
  const rows=[];let row=[],cell='',quoted=false;
  for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else if(quoted||!cell)quoted=!quoted;else throw Error('CSV 引号格式不正确');}else if(c===','&&!quoted){row.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v.trim()))rows.push(row);row=[];cell='';}else cell+=c;}
@@ -17,6 +22,7 @@ export function validateWords(rows){
   if(ids.has(w.id))throw Error(`单词 ${w.id} 重复`);ids.add(w.id);
   for(const k of ['ipa','meaning','definition','sentence','translation'])if(!w[k])throw Error(`${w.id} 缺少 ${k}`);
   if(FIELDS.some(k=>w[k].length>1200))throw Error(`${w.id} 的字段过长`);
+  if(!validAudioURL(w.audioUrl))throw Error(`${w.id} 的 audioUrl 需要 HTTPS 音频直链或 /audio/ 开头的本站音频路径`);
   if(!new RegExp(`\\b${w.id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`,'i').test(w.sentence))throw Error(`${w.id} 的英文例句需要包含该单词`);
   w.pos||='';w.theme=['explore','challenge','protect'].includes(w.theme)?w.theme:'explore';return w;
  });

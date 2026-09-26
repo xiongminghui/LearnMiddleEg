@@ -2,13 +2,15 @@ import { WORD_MAP } from '../data/words.js';
 import {hasOwn,cloneState} from './compat.js';
 import { validEvent,validId } from './protocol.js';
 import { initialProgress } from './engine.js';
+import {MODULES} from './catalog.js';
+import {rememberSession} from './sessions.js';
 export const STORAGE_KEY='word-island-project-v1';
-export function createProfile(){return {version:1,progress:{},session:null,history:[],pendingEvents:[],preferences:{autoAdvance:true},favorites:[]};}
+export function createProfile(){return {version:1,progress:{},session:null,sessions:{},history:[],pendingEvents:[],preferences:{autoAdvance:true},favorites:[]};}
 const finiteTime=n=>Number.isFinite(n)&&n>=0&&n<=8640000000000000;
 function validProgress(p){return p&&finiteTime(p.introducedAt)&&finiteTime(p.dueAt)&&Number.isInteger(p.stage)&&p.stage>=0&&p.stage<=5&&Number.isInteger(p.lapses)&&p.lapses>=0&&p.skills&&['recognize','spell','listen'].every(k=>Number.isInteger(p.skills[k])&&p.skills[k]>=0&&p.skills[k]<=20);}
 const known=id=>typeof id==='string'&&hasOwn(WORD_MAP,id);
 function validSession(s){
-  return s&&validId(s.id)&&['guided','practice','reinforce'].includes(s.mode)&&finiteTime(s.createdAt)&&Array.isArray(s.queue)&&s.queue.length>0&&s.queue.length<=48&&s.queue.every(t=>validId(t.id)&&known(t.wordId)&&['intro','recognize','spell','listen'].includes(t.kind)&&Number.isInteger(t.attempt)&&t.attempt>=0&&t.attempt<=2)&&Number.isInteger(s.index)&&s.index>=0&&s.index<=s.queue.length&&Array.isArray(s.answers)&&s.answers.length<=48&&s.answers.every(a=>validId(a.taskId)&&known(a.wordId)&&['intro','recognize','spell','listen'].includes(a.kind)&&typeof a.independent==='boolean'&&typeof a.correct==='boolean'&&finiteTime(a.at))&&Array.isArray(s.freshIds)&&s.freshIds.every(known)&&Array.isArray(s.reviewIds)&&s.reviewIds.every(known)&&s.baseline&&Object.entries(s.baseline).every(([id,p])=>known(id)&&(p===null||validProgress(p)))&&(s.finishedAt===null||finiteTime(s.finishedAt))&&(s.feedback===null||(s.index<s.queue.length&&s.feedback.taskId===s.queue[s.index].id&&typeof s.feedback.correct==='boolean'));
+  return s&&validId(s.id)&&['guided','practice','reinforce'].includes(s.mode)&&finiteTime(s.createdAt)&&Array.isArray(s.queue)&&s.queue.length>0&&s.queue.length<=48&&s.queue.every(t=>validId(t.id)&&known(t.wordId)&&['intro','recognize','spell','listen'].includes(t.kind)&&Number.isInteger(t.attempt)&&t.attempt>=0&&t.attempt<=2)&&(s.moduleKind===undefined||s.moduleKind==='all'||(hasOwn(MODULES,s.moduleKind)&&s.queue.every(t=>t.kind===s.moduleKind)))&&Number.isInteger(s.index)&&s.index>=0&&s.index<=s.queue.length&&Array.isArray(s.answers)&&s.answers.length<=48&&s.answers.every(a=>validId(a.taskId)&&known(a.wordId)&&['intro','recognize','spell','listen'].includes(a.kind)&&typeof a.independent==='boolean'&&typeof a.correct==='boolean'&&finiteTime(a.at))&&Array.isArray(s.freshIds)&&s.freshIds.every(known)&&Array.isArray(s.reviewIds)&&s.reviewIds.every(known)&&s.baseline&&Object.entries(s.baseline).every(([id,p])=>known(id)&&(p===null||validProgress(p)))&&(s.finishedAt===null||finiteTime(s.finishedAt))&&(s.feedback===null||(s.index<s.queue.length&&s.feedback.taskId===s.queue[s.index].id&&typeof s.feedback.correct==='boolean'));
 }
 export function normalizeProfile(raw){
   if(!raw||raw.version!==1||!raw.progress||typeof raw.progress!=='object')throw new Error('不是可识别的词屿备份文件。');
@@ -20,6 +22,12 @@ export function normalizeProfile(raw){
   const profile=createProfile();
   for(const [id,p] of Object.entries(raw.progress))if(known(id)&&validProgress(p))profile.progress[id]=cloneState(p);
   profile.session=validSession(raw.session)?cloneState(raw.session):null;
+  for(const kind of Object.keys(MODULES)){
+    const session=raw.sessions?.[kind];
+    if(validSession(session)&&session.moduleKind===kind&&session.queue.every(task=>task.kind===kind))profile.sessions[kind]=cloneState(session);
+  }
+  // Migrate the former single active round and keep it linked to its module.
+  rememberSession(profile);
   profile.history=Array.isArray(raw.history)?raw.history.filter(h=>h&&validId(h.id)&&finiteTime(h.at)&&['newCount','reviewCount','correct','total','retries'].every(k=>Number.isInteger(h[k])&&h[k]>=0)&&Array.isArray(h.weakIds)&&h.weakIds.every(known)&&Array.isArray(h.wordIds)&&h.wordIds.every(known)).slice(0,120):[];
   profile.pendingEvents=Array.isArray(raw.pendingEvents)?raw.pendingEvents.filter(validEvent):[];
   profile.favorites=Array.isArray(raw.favorites)?[...new Set(raw.favorites.filter(known))]:[];
@@ -41,7 +49,7 @@ export function loadProfile(){
   } catch {return {profile:createProfile(),warning:'本机记录暂时无法读取。原始记录未删除，你仍可学习并导出备份。',readFailed:true};}
 }
 export function saveProfile(profile){
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(profile));return true;}catch{return false;}
+  try{rememberSession(profile);localStorage.setItem(STORAGE_KEY,JSON.stringify(profile));return true;}catch{return false;}
 }
 let ephemeralToken;
 export function deviceToken(){

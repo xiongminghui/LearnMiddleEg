@@ -4,8 +4,24 @@ import {fileURLToPath} from 'node:url';
 import {resolve,sep,extname} from 'node:path';
 import worker from '../worker/index.js';
 const root=resolve(fileURLToPath(new URL('../public/',import.meta.url)));
-const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json'};
-async function assets(request){if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});let path;try{path=decodeURIComponent(new URL(request.url).pathname);}catch{return new Response('Bad path',{status:400});}const file=resolve(root,'.'+(path==='/'?'/index.html':path));if(!file.startsWith(root+sep))return new Response('Forbidden',{status:403});try{const bytes=await readFile(file);return new Response(request.method==='HEAD'?null:bytes,{headers:{'Content-Type':mime[extname(file)]||'application/octet-stream','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'}});}catch{return new Response('Not found',{status:404});}}
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json','.mp3':'audio/mpeg','.m4a':'audio/mp4','.wav':'audio/wav','.ogg':'audio/ogg'};
+export function assetResponse(request,bytes,type){
+ const headers={'Content-Type':type,'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff','Content-Length':String(bytes.length)};
+ if(type.startsWith('audio/')){
+  headers['Accept-Ranges']='bytes';
+  const range=request.headers.get('range');
+  if(range&&request.method==='GET'){
+   const match=/^bytes=(\d*)-(\d*)$/.exec(range);
+   let start=match?.[1]?Number(match[1]):0,end=match?.[2]?Number(match[2]):bytes.length-1;
+   if(match&&!match[1]&&match[2]){start=Math.max(0,bytes.length-end);end=bytes.length-1;}
+   if(!match||(!match[1]&&!match[2])||!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start>=bytes.length||start>end)return new Response(null,{status:416,headers:{'Content-Range':`bytes */${bytes.length}`}});
+   end=Math.min(end,bytes.length-1);headers['Content-Range']=`bytes ${start}-${end}/${bytes.length}`;headers['Content-Length']=String(end-start+1);
+   return new Response(bytes.subarray(start,end+1),{status:206,headers});
+  }
+ }
+ return new Response(request.method==='HEAD'?null:bytes,{headers});
+}
+async function assets(request){if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});let path;try{path=decodeURIComponent(new URL(request.url).pathname);}catch{return new Response('Bad path',{status:400});}const file=resolve(root,'.'+(path==='/'?'/index.html':path));if(!file.startsWith(root+sep))return new Response('Forbidden',{status:403});try{return assetResponse(request,await readFile(file),mime[extname(file)]||'application/octet-stream');}catch{return new Response('Not found',{status:404});}}
 export function createApp({db,password,publicOrigin}){
  return createServer(async(req,res)=>{
   try{
