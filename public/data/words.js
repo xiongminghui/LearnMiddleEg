@@ -23,8 +23,9 @@ export const WORDS = [
 export const DEFAULT_WORDS=WORDS.slice();
 // Separate demo banks. Publishing one bank never changes the other defaults.
 export const DEFAULT_MODULE_BANKS={intro:DEFAULT_WORDS.slice(0,5),recognize:DEFAULT_WORDS.slice(5,10),spell:DEFAULT_WORDS.slice(10,14),listen:DEFAULT_WORDS.slice(14,18)};
-export const catalogState={banks:typeof window!=='undefined'&&window.wordIslandPublished?Object.fromEntries(Object.entries(window.wordIslandPublished).map(([k,v])=>[k,validateWords(v)])):{},error:typeof window!=='undefined'?window.wordIslandCatalogError:null};
+export const catalogState={banks:typeof window!=='undefined'&&window.wordIslandPublished?Object.fromEntries(Object.entries(window.wordIslandPublished).map(([k,v])=>[k,Array.isArray(v)&&!v.length?[]:validateWords(v)])):{},error:typeof window!=='undefined'?window.wordIslandCatalogError:null};
 export const MODULE_BANKS=catalogState.banks;
+if(typeof window!=='undefined'&&window.wordIslandAccount)WORDS.length=0;
 for(const words of Object.values(MODULE_BANKS))for(const word of words)if(!WORDS.some(w=>w.id===word.id))WORDS.push(word);
 export const WORD_MAP = Object.fromEntries(WORDS.map(word=>[word.id,word]));
 export const THEMES = {

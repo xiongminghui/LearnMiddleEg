@@ -1,1 +1,35 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>词库管理 · 词屿</title><link rel="stylesheet" href="styles.css"><script type="module" src="admin.js"></script></head><body><header class="site-header"><div class="header-inner"><a href="index.html" class="brand">词屿 · 词库管理</a><a href="index.html">返回学习</a></div></header><main class="main"><h1>四个模块，独立管理词库。</h1><p class="muted">上传文件 → 检查预览 → 发布。发布后所有访客刷新页面即可读取更新。</p><section id="login-panel" class="panel"><h2>管理员登录</h2><form id="login-form"><label for="admin-password">管理员密码</label><p><input id="admin-password" class="answer-input" type="password" autocomplete="current-password" required maxlength="256"></p><button class="primary">登录</button></form><p class="settings-note">需要 Render Web Service、PostgreSQL 数据库及管理员密码配置。纯静态上传版不支持共享后台。</p></section><p id="admin-status" role="status" aria-live="polite"></p><section id="editor" hidden><div class="library-controls"><label>选择模块 <select id="module-select" class="search-input"><option value="intro">1 · 单词认知</option><option value="recognize">2 · 英译中选择</option><option value="spell">3 · 中译英拼写</option><option value="listen">4 · 听音拼写</option></select></label><button id="logout" class="secondary">退出登录</button></div><section class="panel"><h2 id="bank-heading"></h2><p>支持 CSV（UTF-8，可用 Excel 编辑）或 JSON。每次导入替换当前模块，其他模块保持不变。</p><div class="dialog-actions"><button id="template-csv" class="secondary">下载 CSV 模板</button><button id="template-json" class="secondary">下载 JSON 模板</button><button id="export-bank" class="secondary">导出当前词库</button></div><p class="settings-note">必填列：word、ipa、meaning、definition、sentence、translation。可选：pos、theme、family、note、memory、audioUrl。audioUrl 为单词录音直链（HTTPS），留空则使用设备合成语音。英文例句需包含目标单词，每个模块最多 1000 词，文件上限 1 MB。</p><p><label class="primary">选择导入文件<input id="bank-file" type="file" accept=".csv,.json,text/csv,application/json" class="sr-only"></label></p><p id="preview-note"></p><div class="table-wrap"><table class="history-table"><thead><tr><th>单词 / 音标</th><th>中文释义</th><th>英文释义</th><th>英文例句</th><th>单词录音</th></tr></thead><tbody id="preview-rows"></tbody></table></div><div class="dialog-actions"><button id="publish" class="primary" disabled>发布当前模块</button><button id="discard" class="secondary" disabled>取消本次导入</button></div><p class="settings-note">密码仅在当前页面内存中使用，退出或刷新后需重新登录。发布前的导入仅是预览，不会影响学习页面。</p></section></section></main></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>账号与词库管理 · 词屿</title><link rel="stylesheet" href="styles.css"><script type="module" src="admin.js"></script></head>
+<body>
+<header class="site-header"><div class="header-inner"><a href="/" class="brand">词屿 · 管理后台</a><a href="/">返回学习</a></div></header>
+<main class="main">
+<h1>分配账号，安排每个人的学习方向。</h1><p class="muted">先发布词库，再创建账号并勾选可学习的方向。学生使用分配的账号登录。</p>
+<section id="login-panel" class="panel account-login"><h2>管理员登录</h2><form id="login-form"><label for="admin-password">管理员密码</label><input id="admin-password" class="search-input" type="password" autocomplete="current-password" required maxlength="256"><button class="primary">登录</button></form></section>
+<p id="admin-status" role="status" aria-live="polite"></p>
+<section id="editor" hidden>
+<div class="admin-toolbar"><div class="filter-group"><button class="filter-button active" data-admin-tab="accounts" aria-pressed="true">账号管理</button><button class="filter-button" data-admin-tab="catalog" aria-pressed="false">词库管理</button></div><button id="logout" class="secondary">退出管理员</button></div>
+<section id="accounts-panel">
+<div class="admin-account-layout">
+<section class="panel"><h2 id="account-heading">创建学习账号</h2><form id="account-form" class="account-form">
+<label for="account-username">账号名</label><input class="search-input" id="account-username" autocomplete="off" autocapitalize="none" required minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{2,39}"><small class="muted">3–40 位英文、数字、点、下划线或短横线。</small>
+<label for="account-name">姓名或昵称</label><input class="search-input" id="account-name" required maxlength="60" autocomplete="off">
+<label for="account-password">密码</label><input class="search-input" id="account-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required><small class="muted" id="password-note">设置至少 8 位密码，再将账号与密码交给使用者。</small>
+<fieldset><legend>分配学习方向（可多选）</legend><div id="account-courses" class="course-checks"></div></fieldset>
+<label class="checkbox-row"><input id="account-active" type="checkbox" checked>启用账号</label>
+<div class="dialog-actions"><button class="primary" id="account-save" type="submit">创建账号</button><button class="secondary" id="account-cancel" type="button" hidden>取消编辑</button></div>
+<p id="account-message" role="status" aria-live="polite"></p>
+</form></section>
+<section class="panel"><div class="section-heading"><h2>已分配账号</h2><button class="text-button" id="accounts-refresh">刷新</button></div><label class="sr-only" for="account-search">搜索账号或姓名</label><input id="account-search" class="search-input" type="search" placeholder="搜索账号或姓名"><div id="account-list" class="account-list"></div></section>
+</div></section>
+<section id="catalog-panel" hidden>
+<div class="library-controls"><label>学习方向 <select id="course-select" class="search-input"></select></label><label>学习模块 <select id="module-select" class="search-input"><option value="intro">1 · 单词认知</option><option value="recognize">2 · 英译中选择</option><option value="spell">3 · 中译英拼写</option><option value="listen">4 · 听音拼写</option></select></label></div>
+<section class="panel"><h2 id="bank-heading"></h2><p>支持 CSV（UTF-8）或 JSON。每次导入替换所选学习方向下的当前模块。</p>
+<div class="dialog-actions"><button id="template-csv" class="secondary">下载 CSV 模板</button><button id="template-json" class="secondary">下载 JSON 模板</button><button id="export-bank" class="secondary">导出当前词库</button></div>
+<p class="settings-note">必填列：word、ipa、meaning、definition、sentence、translation。可选：pos、theme、family、note、memory、audioUrl。audioUrl 为单词录音直链（HTTPS），留空则使用设备合成语音。每模块最多 1000 词，文件上限 1 MB。空词库表示尚未发布内容。</p>
+<p><label class="primary">选择导入文件<input id="bank-file" type="file" accept=".csv,.json,text/csv,application/json" class="sr-only"></label></p><p id="preview-note"></p>
+<div class="table-wrap"><table class="history-table"><thead><tr><th>单词 / 音标</th><th>中文释义</th><th>英文释义</th><th>英文例句</th><th>单词录音</th></tr></thead><tbody id="preview-rows"></tbody></table></div>
+<div class="dialog-actions"><button id="publish" class="primary" disabled>发布当前模块</button><button id="discard" class="secondary" disabled>取消本次导入</button></div>
+</section></section>
+</section>
+</main></body></html>

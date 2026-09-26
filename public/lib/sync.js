@@ -1,6 +1,8 @@
 import { deviceToken } from './store.js';
 import { requestJSON } from './request.js';
-export function createSync(getProfile,persist,onStatus){
+import {createAccountSync} from './account-sync.js';
+export function createSync(getProfile,persist,onStatus,replaceProfile){
+  if(window.wordIslandAccount)return createAccountSync(getProfile,persist,onStatus,window.wordIslandAccount,replaceProfile);
   let available=false,busy=false;
   async function request(path,options={}){
     return requestJSON(path,options);

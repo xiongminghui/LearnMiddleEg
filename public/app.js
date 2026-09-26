@@ -6,20 +6,27 @@ import {planLesson,createSession,createModuleSession,currentTask,recordAnswer,ad
 import {loadProfile,saveProfile,normalizeProfile,STORAGE_KEY} from './lib/store.js';
 import {speak,stopSpeech} from './lib/speech.js';
 import {createSync} from './lib/sync.js';
+import {requestJSON} from './lib/request.js';
+import {LEGACY_STORAGE_KEY} from './lib/account-state.js';
 
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const paths={arrow:'M4 12h16m-6-6 6 6-6 6',back:'M20 12H4m6-6-6 6 6 6',check:'m5 12 4 4L19 6',close:'m6 6 12 12M6 18 18 6',sound:'m11 4-6 5H2v6h3l6 5zM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14',book:'M3 5c3-1 6 0 9 2 3-2 6-3 9-2v14c-3-1-6 0-9 2-3-2-6-3-9-2ZM12 7v14',clock:'M12 7v5l3 2',leaf:'M20 3C8 2 2 9 6 16s16 2 14-13zM4 21 15 10',spark:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z',retry:'M3 9a9 9 0 1 1 0 6M3 4v5h5',star:'m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z'};
 const icon=name=>`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${name==='clock'?'<circle cx="12" cy="12" r="9"/>':''}<path d="${paths[name]||paths.leaf}"/></svg>`;
+const account=window.wordIslandAccount;
 const loaded=loadProfile();let profile=loaded.profile,readOnly=!!loaded.readFailed,persistent=!readOnly;
 let route='home',filter='all',query='',draft='',selected='',assisted=false,activeTaskId='',taskStarted=performance.now(),autoTimer,toastTimer,cloudKind='local',cloudText='学习记录保存在本机';
 function toast(message){$('toast').textContent=message;$('toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3500);$('announcer').textContent=message;}
 function updateStorage(){
-  $('save-status').textContent=persistent?(cloudKind==='cloud'?'云端已连接':'本机记录'):'临时记录';
+  $('save-status').textContent=persistent?(cloudKind==='cloud'?(account?'账号已同步':'云端已连接'):['auth','conflict'].includes(cloudKind)?'同步需处理':'本机记录'):'临时记录';
   $('save-status').title=persistent?cloudText:'无法保存到浏览器，请导出备份。';
 }
-function persist(){persistent=!readOnly&&saveProfile(profile);if(!persistent){$('storage-warning').hidden=false;$('storage-warning').textContent='当前无法保存本机记录，请在“设置与备份”中导出。学习仍可继续。';}updateStorage();return persistent;}
-const sync=createSync(()=>profile,persist,(kind,text)=>{cloudKind=kind;cloudText=text;updateStorage();});
+function persist(fromSync=false){persistent=!readOnly&&saveProfile(profile);if(!persistent){$('storage-warning').hidden=false;$('storage-warning').textContent='当前无法保存本机记录，请在“设置与备份”中导出。学习仍可继续。';}if(!fromSync&&!readOnly)sync.changed?.();updateStorage();return persistent;}
+const sync=createSync(()=>profile,persist,(kind,text)=>{
+  cloudKind=kind;cloudText=text;updateStorage();
+  if(['conflict','auth'].includes(kind)){$('storage-warning').hidden=false;$('storage-warning').innerHTML=`${esc(text)} ${kind==='conflict'?'<button class="text-button" data-action="resolve-cloud">使用云端进度</button> <button class="text-button" data-action="resolve-local">使用本机进度</button> <button class="text-button" data-action="export">导出本机备份</button>':'<a href="/">重新登录</a>'}`;}
+  else if(account&&persistent&&!loaded.warning)$('storage-warning').hidden=true;
+},next=>{clearAuto();stopSpeech();profile=next;activeTaskId='';route='home';render();});
 function clearAuto(){clearTimeout(autoTimer);autoTimer=null;}
 function when(time){if(!time)return '未安排';const delta=time-Date.now();if(delta<=0)return '现在可复习';if(delta<3600000)return `${Math.max(1,Math.ceil(delta/60000))} 分钟后`;if(dayKey(time)===dayKey())return '今天 '+new Date(time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});return new Date(time).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}
 function streak(){const days=new Set(profile.history.map(h=>dayKey(h.at)));let d=new Date(),count=0;if(!days.has(dayKey(d.getTime())))d.setDate(d.getDate()-1);while(days.has(dayKey(d.getTime()))&&count<366){count++;d.setDate(d.getDate()-1);}return count;}
@@ -29,18 +36,18 @@ function render(){
   if(route==='session')renderSession();else if(route==='summary')renderSummary();else if(route==='library')renderLibrary();else if(route==='history')renderHistory();else renderHome();
   updateStorage();
 }
-const moduleBanks=Object.fromEntries(Object.keys(MODULES).map(k=>[k,MODULE_BANKS[k]||DEFAULT_MODULE_BANKS[k]]));
+const moduleBanks=Object.fromEntries(Object.keys(MODULES).map(k=>[k,MODULE_BANKS[k]||(account?[]:DEFAULT_MODULE_BANKS[k])]));
 const taskWord=task=>moduleBanks[task.kind]?.find(w=>w.id===task.wordId)||WORD_MAP[task.wordId];
 let libraryModule='intro';
 function renderHome(){
  const descriptions={intro:'听发音，自由选择查看英文释义或中文与例句。',recognize:'看英文，从本模块的中文释义中选出答案。',spell:'看中文，独立拼出英文，答错后查看完整讲解。',listen:'只听发音，写下英文，可以重复播放。'};
  const visuals={intro:'book',recognize:'check',spell:'spark',listen:'sound'};
  $('main').innerHTML=`<section class="welcome"><div><div class="eyebrow">FOUR WAYS TO LEARN</div><h1>选择一个模块，开始学习。</h1><p>四个独立入口，四份独立词库。每次只练当前模块。</p></div><span class="streak">${icon('leaf')}已连续学习 <b>${streak()}</b> 天</span></section>
- <section class="module-grid" aria-label="四个学习模块">${Object.entries(MODULES).map(([kind,name],i)=>`<article class="module-card"><div class="module-card-top"><span class="module-icon">${icon(visuals[kind])}</span><span class="muted">MODULE 0${i+1}</span></div><h2>${name}</h2><p>${descriptions[kind]}</p><div class="module-count"><strong>${moduleBanks[kind].length}</strong> 个单词 <span>· 独立词库</span></div><div class="module-card-actions"><button class="primary" data-module="${kind}">${profile.sessions[kind]&&!profile.sessions[kind].finishedAt?'继续本模块':'进入模块'} ${icon('arrow')}</button><button class="text-button" data-module-library="${kind}">查看本模块单词</button></div></article>`).join('')}</section>
+ <section class="module-grid" aria-label="四个学习模块">${Object.entries(MODULES).map(([kind,name],i)=>`<article class="module-card"><div class="module-card-top"><span class="module-icon">${icon(visuals[kind])}</span><span class="muted">MODULE 0${i+1}</span></div><h2>${name}</h2><p>${descriptions[kind]}</p><div class="module-count"><strong>${moduleBanks[kind].length}</strong> 个单词 <span>· 独立词库</span></div><div class="module-card-actions"><button class="primary" data-module="${kind}" ${!moduleBanks[kind].length?'disabled':''}>${!moduleBanks[kind].length?'等待词库发布':profile.sessions[kind]&&!profile.sessions[kind].finishedAt?'继续本模块':'进入模块'} ${icon('arrow')}</button><button class="text-button" data-module-library="${kind}">查看本模块单词</button></div></article>`).join('')}</section>
  <section class="panel module-explanation"><h2>练习与词库一一对应</h2><p>进入哪个模块，就练哪个模块的单词。每个模块分别保留未完成进度，切换后可随时回来继续。</p><a class="text-button" href="admin.html">管理四个模块的词库 ${icon('arrow')}</a></section>`;
 }
 function startLesson(practiceId=null){
-  clearAuto();stopSpeech();rememberSession(profile);
+  clearAuto();stopSpeech();if(!moduleBanks[libraryModule].length){toast('此模块尚未发布单词。');return;}rememberSession(profile);
   const saved=profile.sessions[libraryModule];
   if(practiceId&&saved&&!saved.finishedAt&&!confirm('单词专项练习会重新开始本模块的轮次，其他模块进度保持不变。继续吗？'))return;
   if(practiceId){profile.session=createModuleSession({[libraryModule]:moduleBanks[libraryModule].filter(w=>w.id===practiceId)},profile.progress,libraryModule);rememberSession(profile);}
@@ -54,7 +61,7 @@ function highlighted(word){const at=word.sentence.toLowerCase().indexOf(word.id)
 const audioSource=word=>word.audioUrl?'词库录音':'设备合成语音 · 优先英式英语';
 function wordInfo(word,progressive=false){
   const shown=progressive?(reveals.get(activeTaskId)||{}):{english:true,chinese:true};
-  return `<span class="small-label">${THEMES[word.theme].name} · 高中核心词</span><h2 class="word-title" lang="en">${word.id}</h2><div class="pronounce"><span>英 ${esc(word.ipa)}</span><button class="audio-button" data-speak="${word.id}" data-audio="${esc(word.audioUrl||'')}" aria-label="朗读 ${word.id}">${icon('sound')}朗读</button></div><p class="audio-source">${audioSource(word)}</p>
+  return `<span class="small-label">${THEMES[word.theme].name} · ${esc(account?.course.title||"示例词库")}</span><h2 class="word-title" lang="en">${word.id}</h2><div class="pronounce"><span>英 ${esc(word.ipa)}</span><button class="audio-button" data-speak="${word.id}" data-audio="${esc(word.audioUrl||'')}" aria-label="朗读 ${word.id}">${icon('sound')}朗读</button></div><p class="audio-source">${audioSource(word)}</p>
   ${progressive?`<div class="definition-actions"><button class="secondary" data-action="reveal-english" aria-expanded="${!!shown.english}" aria-controls="english-definition">英译英</button><button class="secondary" data-action="reveal-chinese" aria-expanded="${!!shown.chinese}" aria-controls="chinese-definition">中文翻译</button></div>`:''}
   ${shown.english?`<section class="definition-block" ${progressive?'id="english-definition"':''}><h3>英文释义</h3><p lang="en">${esc(word.definition)}</p></section>`:''}
   ${shown.chinese?`<section ${progressive?'id="chinese-definition"':''}><div class="meaning-line"><i>${esc(word.pos)}</i>${esc(word.meaning)}</div><div class="example-block"><h3>英文造句</h3><p lang="en">${highlighted(word)}</p><p class="translation">${esc(word.translation)}</p></div><div class="memory-box">${esc(word.memory)}</div><details class="word-family"><summary>词族与用法，一起记</summary><p>${esc(word.family)}</p><p>${esc(word.note)}</p></details></section>`:''}`;
@@ -103,16 +110,16 @@ function renderLibrary(){
 }
 function renderHistory(){
   const history=profile.history,days=new Set(history.map(h=>dayKey(h.at))).size,correct=history.reduce((n,h)=>n+h.correct,0),total=history.reduce((n,h)=>n+h.total,0);
-  $('main').innerHTML=`<header class="page-heading"><div class="eyebrow">SMALL STEPS, REAL PROGRESS</div><h1>进步，藏在每一次回忆里。</h1><p>这里保留最近 120 轮记录。首次独立答对率不包含看提示和重试答对。</p></header><div class="history-stats"><div class="history-stat"><strong>${history.length}</strong><span>完成轮次</span></div><div class="history-stat"><strong>${days}</strong><span>记录中的学习天数</span></div><div class="history-stat"><strong>${total?Math.round(correct/total*100)+'%':'—'}</strong><span>首次独立答对率</span></div></div>${history.length?`<div class="table-wrap"><table class="history-table"><thead><tr><th>时间</th><th>新词 / 复习</th><th>首次独立答对</th><th>追加巩固</th></tr></thead><tbody>${history.map(h=>`<tr><td>${new Date(h.at).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td><td>${h.newCount} / ${h.reviewCount}</td><td>${h.correct} / ${h.total}</td><td>${h.retries} 题</td></tr>`).join('')}</tbody></table></div>`:'<section class="panel"><p class="empty-copy">还没有完成的学习轮次。从今天的第一小轮开始吧。</p><button class="primary" data-action="start">开始学习 '+icon('arrow')+'</button></section>'}<p class="settings-note">记录属于当前浏览器。你可以在“设置与备份”中导出，换设备后手动导入。</p>`;
+  $('main').innerHTML=`<header class="page-heading"><div class="eyebrow">SMALL STEPS, REAL PROGRESS</div><h1>进步，藏在每一次回忆里。</h1><p>这里保留最近 120 轮记录。首次独立答对率不包含看提示和重试答对。</p></header><div class="history-stats"><div class="history-stat"><strong>${history.length}</strong><span>完成轮次</span></div><div class="history-stat"><strong>${days}</strong><span>记录中的学习天数</span></div><div class="history-stat"><strong>${total?Math.round(correct/total*100)+'%':'—'}</strong><span>首次独立答对率</span></div></div>${history.length?`<div class="table-wrap"><table class="history-table"><thead><tr><th>时间</th><th>新词 / 复习</th><th>首次独立答对</th><th>追加巩固</th></tr></thead><tbody>${history.map(h=>`<tr><td>${new Date(h.at).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td><td>${h.newCount} / ${h.reviewCount}</td><td>${h.correct} / ${h.total}</td><td>${h.retries} 题</td></tr>`).join('')}</tbody></table></div>`:'<section class="panel"><p class="empty-copy">还没有完成的学习轮次。从今天的第一小轮开始吧。</p><button class="primary" data-action="start">开始学习 '+icon('arrow')+'</button></section>'}<p class="settings-note">${account?'记录属于当前账号和学习方向，换设备登录后可以继续。':'记录属于当前浏览器。你可以在“设置与备份”中导出。'}</p>`;
 }
 function openWord(id){const w=moduleBanks[libraryModule].find(w=>w.id===id);if(!w)return;clearAuto();$('detail-dialog').innerHTML=`<button class="dialog-close" data-close="detail-dialog" aria-label="关闭单词详情">${icon('close')}</button><h2 id="detail-title" class="sr-only">${id} 单词详情</h2><img class="detail-image" src="${THEMES[w.theme].image}" alt="${esc(w.memory)}">${wordInfo(w)}<div class="dialog-actions"><button class="primary" data-practice-word="${id}">在本模块练习此词</button><button class="secondary" data-favorite="${id}">${icon('star')}${profile.favorites.includes(id)?'取消收藏':'收藏单词'}</button></div>`;if(!$('detail-dialog').hasAttribute('open'))openDialog($('detail-dialog'));}
-function openSettings(){clearAuto();$('settings-dialog').innerHTML=`<button class="dialog-close" data-close="settings-dialog" aria-label="关闭设置">${icon('close')}</button><h2 class="dialog-heading" id="settings-title">按自己的节奏，慢慢记牢。</h2><div class="settings-row"><div><p>答对后自动继续</p><small>仅适用于英译中选择和听音拼写。中译英拼写、答错和单词认知始终手动继续。</small></div><input type="checkbox" data-pref="autoAdvance" aria-label="答对后自动继续" ${profile.preferences.autoAdvance?'checked':''}></div><div class="settings-row"><div><p>单词发音来源</p><small>优先播放词库配置的录音。没有录音时使用设备合成语音，优先英式英语；音色可能因设备不同而变化。设备语音不等同于北师大版教材录音。</small></div></div><div class="settings-row"><div><p>学习记录</p><small>${esc(persistent?cloudText:'当前为临时记录，请及时导出')}<br>云端可备份交互事件，不会自动跨设备同步学习进度。</small></div></div><div class="settings-row"><div><p>保存一份自己的进度</p><small>导出词汇状态、轮次记录和未完成的练习。不包含设备访问密钥。</small></div><button class="secondary small" data-action="export">导出备份</button></div><div class="settings-row"><div><p>从备份继续</p><small>导入会替换当前浏览器的学习进度。</small></div><button class="secondary small" data-action="import">导入备份</button></div><p class="settings-note">复习采用固定间隔演示规则：完整独立回忆后逐步延长至 1、3、7、14、30 天；出现困难则 10 分钟后再见。它不预测真实遗忘概率。关闭页面后不会发送提醒。</p>`;openDialog($('settings-dialog'));}
+function openSettings(){clearAuto();$('settings-dialog').innerHTML=`<button class="dialog-close" data-close="settings-dialog" aria-label="关闭设置">${icon('close')}</button><h2 class="dialog-heading" id="settings-title">按自己的节奏，慢慢记牢。</h2><div class="settings-row"><div><p>答对后自动继续</p><small>仅适用于英译中选择和听音拼写。中译英拼写、答错和单词认知始终手动继续。</small></div><input type="checkbox" data-pref="autoAdvance" aria-label="答对后自动继续" ${profile.preferences.autoAdvance?'checked':''}></div><div class="settings-row"><div><p>单词发音来源</p><small>优先播放词库配置的录音。没有录音时使用设备合成语音，优先英式英语；音色可能因设备不同而变化。设备语音不等同于北师大版教材录音。</small></div></div><div class="settings-row"><div><p>学习记录</p><small>${esc(persistent?cloudText:'当前为临时记录，请及时导出')}<br>${account?'当前学习方向的进度保存在账号中，换设备登录后可继续。':'学习记录保存在当前浏览器。'}</small></div></div><div class="settings-row"><div><p>保存一份自己的进度</p><small>导出词汇状态、轮次记录和未完成的练习。不包含设备访问密钥。</small></div><button class="secondary small" data-action="export">导出备份</button></div><div class="settings-row"><div><p>从备份继续</p><small>${account?"导入会替换当前账号、当前学习方向的进度，并同步到其他设备。":"导入会替换当前浏览器的学习进度。"}</small></div><button class="secondary small" data-action="import">导入备份</button></div>${account&&account.course.id==='high-school'?'<div class="settings-row"><div><p>接着学习旧版进度</p><small>确认旧版记录属于你后，可导入当前高中账号。</small></div><button class="secondary small" data-action="import-legacy">导入旧版进度</button></div>':''}<p class="settings-note">复习采用固定间隔演示规则：完整独立回忆后逐步延长至 1、3、7、14、30 天；出现困难则 10 分钟后再见。它不预测真实遗忘概率。关闭页面后不会发送提醒。</p>`;openDialog($('settings-dialog'));}
 function exportBackup(){const blob=new Blob([JSON.stringify(profile,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`词屿学习备份-${dayKey()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('学习备份已准备下载。');}
 function speechError(message){toast(message);const dialog=document.querySelector('dialog[open]');if(dialog){let p=dialog.querySelector('.speech-error');if(!p){p=document.createElement('p');p.className='settings-note speech-error';p.setAttribute('role','status');dialog.append(p);}p.textContent=message;}}
-document.addEventListener('click',event=>{
+document.addEventListener('click',async event=>{
   const button=event.target.closest('button');if(!button||button.disabled)return;
   if(button.dataset.moduleLibrary){libraryModule=button.dataset.moduleLibrary;filter='all';query='';navigate('library');return;}
-  if(button.dataset.module){const kind=button.dataset.module;if(kind==='recognize'&&new Set(moduleBanks[kind].map(w=>w.meaning)).size<2){toast('本模块至少需要 2 个中文释义不同的单词，请先在后台补充。');return;}libraryModule=kind;enterModule(profile,moduleBanks,kind);activeTaskId='';persist();navigate('session');return;}
+  if(button.dataset.module){const kind=button.dataset.module;if(!moduleBanks[kind].length){toast('此模块尚未发布单词。');return;}if(kind==='recognize'&&new Set(moduleBanks[kind].map(w=>w.meaning)).size<2){toast('本模块至少需要 2 个中文释义不同的单词，请先在后台补充。');return;}libraryModule=kind;enterModule(profile,moduleBanks,kind);activeTaskId='';persist();navigate('session');return;}
   if(button.dataset.nav){navigate(button.dataset.nav);return;}
   if(button.dataset.theme){filter=button.dataset.theme;query='';navigate('library');return;}
   if(button.dataset.filter){filter=button.dataset.filter;renderLibrary();return;}
@@ -123,6 +130,20 @@ document.addEventListener('click',event=>{
   if(button.dataset.practiceWord){closeDialog($('detail-dialog'));startLesson(button.dataset.practiceWord);return;}
   if(button.dataset.favorite){const id=button.dataset.favorite;profile.favorites=profile.favorites.includes(id)?profile.favorites.filter(v=>v!==id):[...profile.favorites,id];persist();openWord(id);if(route==='library')renderLibrary();return;}
   switch(button.dataset.action){
+    case 'account-courses':
+    case 'account-logout':{
+      button.disabled=true;clearAuto();stopSpeech();
+      try{if(!await sync.flush()){toast('进度尚未同步，请先处理上方提示或稍后重试。');break;}if(button.dataset.action==='account-logout')await requestJSON('/api/auth/logout',{method:'POST'});location.assign('/');}catch(error){toast(error.message);}finally{button.disabled=false;}break;
+    }
+    case 'resolve-cloud':
+    case 'resolve-local':{
+      const useCloud=button.dataset.action==='resolve-cloud';
+      if(!confirm(useCloud?'使用云端进度替换当前本机进度？建议先导出本机备份。':'将本机进度保存为云端最新进度？其他设备刷新后将使用这份记录。'))break;
+      button.disabled=true;try{await sync.resolveConflict(useCloud?'cloud':'local');}catch(error){toast(error.message);}finally{button.disabled=false;}break;
+    }
+    case 'import-legacy':{
+      try{const raw=localStorage.getItem(LEGACY_STORAGE_KEY);if(!raw){toast('这个浏览器没有旧版学习记录。');break;}const restored=normalizeProfile(JSON.parse(raw));if(!confirm('确认旧版本机记录属于你，并替换当前高中方向的进度？其他学习方向不受影响。'))break;profile=restored;activeTaskId='';persist();closeDialog($('settings-dialog'));navigate('home');sync.flush();}catch{toast('旧版记录无法读取，请改用备份文件导入。');}break;
+    }
     case 'listen-word':{const task=currentTask(profile.session);if(task?.kind==='listen')speak(task.wordId,speechError,taskWord(task).audioUrl);break;}
     case 'start':startLesson();break;
     case 'reveal-english':
@@ -151,11 +172,16 @@ $('import-file').addEventListener('change',async event=>{
 });
 window.addEventListener('hashchange',()=>{if(location.hash==='#home')navigate('home');});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearAuto();stopSpeech();}else if(route==='home')renderHome();else if(route==='session'&&$('auto-note'))$('auto-note').textContent='准备好后，点击继续。';});
-window.addEventListener('pagehide',()=>{clearAuto();stopSpeech();});
-window.addEventListener('storage',event=>{if(event.key!==STORAGE_KEY||!event.newValue)return;try{clearAuto();profile=normalizeProfile(JSON.parse(event.newValue));activeTaskId='';render();toast('另一标签页更新了学习记录，已同步。');}catch{}});
+window.addEventListener('pagehide',()=>{clearAuto();stopSpeech();if(account)sync.flush();});
+window.addEventListener('storage',event=>{if(event.key!==STORAGE_KEY||!event.newValue)return;if(account){toast('另一标签页有新的学习记录，可刷新后继续。');return;}try{clearAuto();profile=normalizeProfile(JSON.parse(event.newValue));activeTaskId='';render();toast('另一标签页更新了学习记录，已同步。');}catch{}});
 if(loaded.warning){$('storage-warning').textContent=loaded.warning;$('storage-warning').hidden=false;}
-if(!readOnly)persist();render();sync.init();
+if(!readOnly&&!account)persist();render();if(!readOnly)sync.init();
 
 if(catalogState.error){$('storage-warning').hidden=false;$('storage-warning').textContent=catalogState.error;}
 
 document.querySelector('.site-footer .muted').textContent=`/ ${WORDS.length} 个可学习词`;
+
+if(account){
+ $('account-bar').hidden=false;$('account-bar').innerHTML=`<span><strong>${esc(account.user.displayName)}</strong> · ${esc(account.course.title)}</span><div><button class="text-button" data-action="account-courses">切换学习方向</button><button class="text-button" data-action="account-logout">退出登录</button></div>`;
+ $('course-footer').textContent='词屿 · '+account.course.title;
+}
