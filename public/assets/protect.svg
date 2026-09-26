@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 880" role="img" aria-labelledby="title desc">
+  <title id="title">Protect · 守护一棵幼苗</title>
+  <desc id="desc">一双手轻轻护住土壤里的绿色幼苗，远处是阳光下的山林。所有图形均由原生 SVG 路径绘制。</desc>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e5eee2"/><stop offset="1" stop-color="#f6dda9"/></linearGradient>
+    <linearGradient id="earth" x2="0" y2="1"><stop stop-color="#536d46"/><stop offset="1" stop-color="#274f3c"/></linearGradient>
+    <linearGradient id="skin" x2="0" y2="1"><stop stop-color="#e4b27b"/><stop offset="1" stop-color="#c68d5e"/></linearGradient>
+    <g id="pine"><path d="M-3 113h6v37h-6z" fill="#5c7151"/><path d="M0 0-22 44h11l-27 44h17l-31 48H52L21 88h17L11 44h11z" fill="currentColor"/></g>
+    <g id="hand">
+      <path d="M-40 514 95 505c34-3 55 10 76 31l75 75c14 14 28 23 47 29l80 29c20 7 25 18 15 28-8 10-24 10-40 7l-58-9c-7-1-9 7 0 11l72 24c18 6 24 17 16 28-7 10-21 11-38 7l-64-15c-8-2-12 4-2 9l45 19c17 7 21 18 13 27-8 8-20 8-33 4l-92-28c-36-11-73-22-102-43L-27 648z" fill="url(#skin)"/>
+      <path d="M-40 514 95 505c34-3 55 10 76 31l75 75c14 14 28 23 47 29l80 29c17 6 23 15 19 23-33-10-77-17-101-28-35-16-49-37-76-57-26-18-67-43-104-38L-40 590z" fill="#edc48e"/>
+      <path d="m-28 638 128 66c29 20 66 32 100 43l114 35c5 6 7 15 0 21-8 8-20 8-33 4l-92-28c-36-11-73-22-102-43L-27 648z" fill="#b87c52" opacity=".5"/>
+      <g stroke="#b97c50" stroke-width="3" fill="none" stroke-linecap="round"><path d="m213 658 74 36m-73 27 60 29m-69 5 51 25"/><path d="M116 568q39-10 72 21" opacity=".7"/></g>
+      <path d="m-35 478 111 6 13 76-119 48z" fill="#d7d9b2"/>
+      <path d="m-31 573 116-37 5 24-120 48z" fill="#adb594"/>
+      <g stroke="#98aa8a" stroke-width="3"><path d="m-8 580 8 22m14-30 8 22m15-29 8 22m14-29 8 22"/></g>
+    </g>
+  </defs>
+  <path d="M0 0h800v880H0z" fill="url(#sky)"/>
+  <circle cx="398" cy="182" r="83" fill="#fff7d6" opacity=".4"/><circle cx="398" cy="182" r="53" fill="#fff4d0"/>
+  <g fill="#fbf6e1"><path d="M33 192c21-23 44-12 59-16 14-23 36-23 53-8 23-2 40 10 46 24H33z"/><path d="M520 229c18-17 39-10 51-11 11-25 43-21 57-3 28-8 45 4 52 14H520z"/></g>
+  <path d="m0 398 124-140 97 129 98-106 145 120 149-155 91 96 96-49v345H0z" fill="#b6c6a9"/>
+  <path d="m388 439 182-180 92 111 60-53 78 92v287H388z" fill="#8ca990"/>
+  <path d="m531 298 39-39 43 52-26-10-13-21-13 17-9-9z" fill="#f0edd4"/>
+  <path d="M0 441c92-80 179-49 258-15 64 27 136 25 234 8 105-18 190-16 308 26v236H0z" fill="#819d76"/>
+  <path d="M0 503c91-47 187-35 300-9 129 30 302-37 500-1v387H0z" fill="#5b885f"/>
+  <path d="M390 428c42 0 78 2 108 3-30 31-75 42-60 68 17 28 60 23 110 36l-50 65H310c82-49 113-76 83-95-31-20-26-44-3-77z" fill="#c1d6b1"/>
+  <path d="M0 538c161-75 229 59 382 36 145-22 243-18 418-62v368H0z" fill="url(#earth)"/>
+  <g color="#416f4c"><use href="#pine" transform="translate(155 369) scale(.8)"/><use href="#pine" transform="translate(217 405) scale(.66)"/><use href="#pine" transform="translate(583 383) scale(.78)"/><use href="#pine" transform="translate(646 399) scale(.68)"/><use href="#pine" transform="translate(704 357) scale(.98)"/></g>
+  <g color="#315c43"><use href="#pine" transform="translate(65 383) scale(1.2)"/><use href="#pine" transform="translate(765 421) scale(1.1)"/></g>
+  <ellipse cx="402" cy="676" rx="205" ry="86" fill="#365139"/>
+  <path d="M223 661c24-20 43-49 85-57 47-22 110-24 154-3 52 0 89 25 120 61-53 31-93 53-174 47-88-7-143-13-185-48z" fill="#725b3c"/>
+  <path d="M223 661c24-20 43-49 85-57 47-22 110-24 154-3 52 0 89 25 120 61-48-2-60-23-94-23-36 0-61 14-97 9-46-6-83-9-117 14z" fill="#917248"/>
+  <g fill="#b38d56"><ellipse cx="316" cy="645" rx="7" ry="4"/><ellipse cx="464" cy="666" rx="8" ry="4"/><ellipse cx="439" cy="616" rx="5" ry="3"/><ellipse cx="361" cy="677" rx="7" ry="4"/><ellipse cx="510" cy="650" rx="5" ry="3"/><ellipse cx="369" cy="620" rx="6" ry="3"/></g>
+  <g fill="#4c4932"><ellipse cx="329" cy="667" rx="7" ry="3"/><ellipse cx="479" cy="634" rx="5" ry="3"/><ellipse cx="405" cy="686" rx="7" ry="4"/></g>
+  <use href="#hand"/>
+  <use href="#hand" transform="translate(800 0) scale(-1 1)"/>
+  <g id="seedling">
+    <path d="M401 636c-3-52 15-89 19-132 4-37-4-70-3-97" fill="none" stroke="#467247" stroke-width="9" stroke-linecap="round"/>
+    <path d="M416 457c-17-38-6-68 50-91 16 41-1 81-50 91z" fill="#7da855"/>
+    <path d="M416 457c-4-32 26-68 50-91-8 42-21 68-50 91z" fill="#619346"/>
+    <path d="M416 445q15-37 39-60" fill="none" stroke="#c2cd79" stroke-width="3" stroke-linecap="round"/>
+    <path d="M415 518c-48 5-81-22-87-70 48-3 83 20 87 70z" fill="#4c8856"/>
+    <path d="M328 448c19 21 58 37 87 70-43-5-72-27-87-70z" fill="#386e49"/>
+    <path d="m343 463 58 44m-38-30 1 15m14-7 16-3" fill="none" stroke="#a6bf70" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M414 545c19-41 55-54 103-30-18 48-56 58-103 30z" fill="#8aac59"/>
+    <path d="M414 545c29-15 63-23 103-30-18 40-58 56-103 30z" fill="#699342"/>
+    <path d="m428 542 66-20m-37 12 11 14m3-19 8-11" fill="none" stroke="#c7ce7a" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M404 589c-33 1-53-16-63-49 35-3 60 14 63 49z" fill="#659444"/>
+    <path d="m353 552 38 28" stroke="#b6c473" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M418 423c-22-14-27-38-14-63 27 13 35 34 14 63z" fill="#a5ba65"/>
+    <path d="m408 375 8 35" stroke="#d7db9d" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+  <g fill="#9dac65"><path d="M112 834c-31-3-50-24-52-58 38 7 52 25 52 58z"/><path d="M112 834c-2-41 16-64 54-78-1 39-19 67-54 78z"/><path d="M682 812c-32 6-52-4-68-31 31-7 57 5 68 31z"/><path d="M682 812c-9-37 1-62 29-82 10 38 0 64-29 82z"/></g>
+  <g stroke="#52774b" stroke-width="3" fill="none" stroke-linecap="round"><path d="m113 849-1-31 38-46m-38 61-37-38M685 840l-4-37 22-49m-22 58-44-20"/></g>
+  <g fill="none" stroke="#829d80" stroke-width="3" stroke-linecap="round"><path d="M257 236q7-7 14 0 7-7 14 0m180 27q6-6 12 0 6-6 12 0"/></g>
+</svg>
