@@ -1,7 +1,7 @@
 import {randomBytes,randomUUID} from 'node:crypto';
 import {digest,sameSecret,hashPassword,verifyPassword} from './passwords.js';
 import {MODULES,validateWords} from '../public/lib/catalog.js';
-import {DEFAULT_MODULE_BANKS} from '../public/data/words.js';
+import {effectiveBanks,courseInfo,catalogResponse,emptyBanks,courseOrder} from './catalogs.js';
 import {normalizeProfile} from '../public/lib/store.js';
 
 const json=(data,status=200,headers={})=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
@@ -10,17 +10,9 @@ const safeMethods=['GET','HEAD'];
 const publicAccount=row=>({id:row.id,username:row.username,displayName:row.display_name,active:row.active});
 const tokenFrom=request=>request.headers.get('cookie')?.split(';').map(part=>part.trim()).find(part=>part.startsWith(COOKIE+'='))?.slice(COOKIE.length+1)||'';
 const cookie=(request,value,seconds)=>`${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${seconds}${new URL(request.url).protocol==='https:'?'; Secure':''}`;
-async function bodyOf(request,limit=1048576){
+async function bodyOf(request,limit=8*1024*1024){
  if(!request.headers.get('content-type')?.startsWith('application/json'))throw Error('请提交 JSON 数据。');
  const text=await request.text();if(Buffer.byteLength(text)>limit)throw Error('提交的数据过大。');return JSON.parse(text);
-}
-function effectiveBanks(course){
- const stored=JSON.parse(course.banks_json);
- return Object.fromEntries(Object.keys(MODULES).map(kind=>[kind,stored[kind]||(course.id==='high-school'?DEFAULT_MODULE_BANKS[kind]:[])]));
-}
-function courseInfo(course){
- const banks=effectiveBanks(course);
- return {id:course.id,title:course.title,wordCount:new Set(Object.values(banks).flat().map(word=>word.id)).size,revision:course.revision};
 }
 function parseBanks(banks){
  if(!banks||typeof banks!=='object'||Array.isArray(banks)||Object.keys(banks).some(key=>!Object.hasOwn(MODULES,key)))throw Error('词库格式不正确。');
@@ -42,9 +34,9 @@ export function createAccountAPI({db,password}){
   const token=tokenFrom(request);if(!/^[0-9a-f]{64}$/.test(token))return null;
   return db.prepare('SELECT a.id,a.username,a.display_name,a.active FROM student_accounts a JOIN student_sessions s ON a.id=s.student_id WHERE s.token_hash=? AND s.expires_at>? AND s.auth_version=a.auth_version AND a.active=TRUE').bind(digest(token),Date.now()).first();
  };
- const assignedCourses=account=>db.prepare('SELECT c.id,c.title,c.banks_json,c.revision FROM study_courses c JOIN student_courses sc ON sc.course_id=c.id WHERE sc.student_id=? ORDER BY c.id').bind(account.id).all();
- const authorizedCourse=async(account,id)=>db.prepare('SELECT c.id,c.title,c.banks_json,c.revision FROM study_courses c JOIN student_courses sc ON sc.course_id=c.id WHERE sc.student_id=? AND c.id=?').bind(account.id,id).first();
- const courseList=()=>db.prepare('SELECT id,title,banks_json,revision FROM study_courses ORDER BY id').all();
+ const assignedCourses=account=>db.prepare('SELECT c.id,c.title,c.banks_json,c.revision,c.kind,c.builtin_version FROM study_courses c JOIN student_courses sc ON sc.course_id=c.id WHERE sc.student_id=? ORDER BY c.id').bind(account.id).all();
+ const authorizedCourse=async(account,id)=>db.prepare('SELECT c.id,c.title,c.banks_json,c.revision,c.kind,c.builtin_version FROM study_courses c JOIN student_courses sc ON sc.course_id=c.id WHERE sc.student_id=? AND c.id=?').bind(account.id,id).first();
+ const courseList=()=>db.prepare('SELECT id,title,banks_json,revision,kind,builtin_version FROM study_courses ORDER BY id').all();
  async function handle(request,clientAddress='local'){
   const url=new URL(request.url),path=url.pathname,method=request.method;
   const isAdmin=path.startsWith('/api/admin/');
@@ -61,16 +53,26 @@ export function createAccountAPI({db,password}){
     const allowed=takeAttempt('admin:'+clientAddress,20);
     return json({error:allowed?'管理员密码不正确。':'尝试过于频繁，请五分钟后重试。'},allowed?401:429);
    }
-   if(path==='/api/admin/courses'&&method==='GET')return json({courses:(await courseList()).map(courseInfo)});
+   if(path==='/api/admin/courses'&&method==='GET')return json({courses:(await courseList()).map(courseInfo).sort(courseOrder)});
+   if(path==='/api/admin/courses'&&method==='POST'){
+    let body,title,source;
+    try{body=await bodyOf(request,4096);title=typeof body.title==='string'?body.title.trim():'';if(!title||title.length>80)throw Error('方向名称需为 1–80 个字符。');if(body.copyFrom!==undefined&&typeof body.copyFrom!=='string')throw Error('复制来源不正确。');}catch(error){return json({error:error.message},400);}
+    if(body.copyFrom){source=await db.prepare('SELECT id,title,banks_json,revision,kind,builtin_version FROM study_courses WHERE id=?').bind(body.copyFrom).first();if(!source)return json({error:'要复制的方向不存在。'},404);}
+    const id='custom-'+randomUUID(),banks=source?effectiveBanks(source):emptyBanks();
+    await db.prepare("INSERT INTO study_courses(id,title,banks_json,kind) VALUES(?,?,?,'custom')").bind(id,title,JSON.stringify(banks)).run();
+    return json({course:courseInfo({id,title,banks_json:JSON.stringify(banks),kind:'custom',revision:0})},201);
+   }
    if(path==='/api/admin/catalog'){
-    const course=await db.prepare('SELECT id,title,banks_json,revision FROM study_courses WHERE id=?').bind(url.searchParams.get('course')||'high-school').first();
+    const course=await db.prepare('SELECT id,title,banks_json,revision,kind,builtin_version FROM study_courses WHERE id=?').bind(url.searchParams.get('course')||'high-school').first();
     if(!course)return json({error:'学习方向不存在。'},404);
-    if(method==='GET')return json({course:courseInfo(course),banks:effectiveBanks(course),revision:course.revision});
+    const module=url.searchParams.get('module');if(module&&!Object.hasOwn(MODULES,module))return json({error:'学习模块不存在。'},400);
+    if(method==='GET')return json(catalogResponse(course,module));
     if(method!=='PUT')return json({error:'不支持此操作。'},405);
-    let body,banks;try{body=await bodyOf(request);if(!Number.isInteger(body.revision)||body.revision<0)throw Error('词库版本不正确。');banks=parseBanks(body.banks);}catch(error){return json({error:error.message},400);}
+    if(course.kind==='builtin')return json({error:'内置默认词库受保护。请新建自定义方向，或复制为自定义方向后再导入。'},403);
+    let body,banks;try{body=await bodyOf(request);if(!Number.isInteger(body.revision)||body.revision<0)throw Error('词库版本不正确。');if(body.module){if(!Object.hasOwn(MODULES,body.module))throw Error('学习模块不存在。');banks={...effectiveBanks(course),...parseBanks({[body.module]:body.words})};}else banks=parseBanks(body.banks);}catch(error){return json({error:error.message},400);}
     const updated=await db.prepare('UPDATE study_courses SET banks_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND revision=? RETURNING revision').bind(JSON.stringify(banks),course.id,body.revision).first();
     if(!updated)return json({error:'词库已被更新，请重新选择学习方向后再导入。'},409);
-    return json({banks,revision:updated.revision});
+    return json({banks:body.module?{[body.module]:banks[body.module]}:banks,revision:updated.revision});
    }
    if(path==='/api/admin/accounts'&&method==='GET'){
     const accounts=await db.prepare('SELECT id,username,display_name,active FROM student_accounts ORDER BY username').all();
@@ -84,7 +86,7 @@ export function createAccountAPI({db,password}){
      body=await bodyOf(request,16384);username=String(body.username||'').trim().toLowerCase();displayName=String(body.displayName||username).trim();
      if(!accountId&&!/^[a-z0-9][a-z0-9_.-]{2,39}$/.test(username))throw Error('账号需为 3–40 位英文、数字、点、下划线或短横线。');
      if(!displayName||displayName.length>60)throw Error('姓名或昵称需为 1–60 个字符。');
-     courses=body.courses;if(!Array.isArray(courses)||courses.length>5||new Set(courses).size!==courses.length||courses.some(id=>typeof id!=='string'||!(id.length<30)))throw Error('分配的学习方向不正确。');
+     courses=body.courses;if(!Array.isArray(courses)||courses.length>200||new Set(courses).size!==courses.length||courses.some(id=>typeof id!=='string'||!(id.length<80)))throw Error('分配的学习方向不正确。');
      const available=new Set((await courseList()).map(course=>course.id));if(courses.some(id=>!available.has(id)))throw Error('学习方向不存在。');
      if(typeof body.active!=='boolean')throw Error('账号状态不正确。');
      if(!accountId||body.password){if(typeof body.password!=='string'||body.password.length<8||body.password.length>128)throw Error('密码需为 8–128 个字符。');}
@@ -127,14 +129,14 @@ export function createAccountAPI({db,password}){
    await db.prepare('DELETE FROM student_sessions WHERE token_hash=?').bind(digest(tokenFrom(request))).run();
    return json({ok:true},200,{'Set-Cookie':cookie(request,'',0)});
   }
-  if(path==='/api/status'&&method==='GET')return json({storage:'postgres',version:2,accounts:true});
+  if(path==='/api/status'&&method==='GET')return json({storage:'postgres',version:3,accounts:true,builtinCatalogs:true});
   const account=await accountFor(request);if(!account)return json({error:'请使用管理员分配的账号登录。'},401);
-  if(path==='/api/auth/me'&&method==='GET')return json({user:publicAccount(account),courses:(await assignedCourses(account)).map(courseInfo)});
+  if(path==='/api/auth/me'&&method==='GET')return json({user:publicAccount(account),courses:(await assignedCourses(account)).map(courseInfo).sort(courseOrder)});
   const match=path.match(/^\/api\/courses\/([a-z0-9-]+)\/(catalog|progress)$/);
   if(!match)return json({error:'请使用账号对应的学习方向接口。'},404);
   if(request.headers.get('x-learner-id')!==account.id)return json({error:'当前登录账号已变化，请刷新后继续。'},401);
   const course=await authorizedCourse(account,match[1]);if(!course)return json({error:'该学习方向尚未分配给此账号。'},403);
-  if(match[2]==='catalog'&&method==='GET')return json({course:courseInfo(course),banks:effectiveBanks(course),revision:course.revision});
+  if(match[2]==='catalog'&&method==='GET')return json(catalogResponse(course));
   if(match[2]==='progress'){
    if(method==='GET'){
     await db.prepare('INSERT INTO student_profiles(student_id,course_id) VALUES(?,?) ON CONFLICT(student_id,course_id) DO NOTHING').bind(account.id,course.id).run();

@@ -21,7 +21,8 @@ test('PostgreSQL migration, publish, revision guard and duplicate event persiste
 test('Node server serves assets, health and authenticated API behind HTTPS proxy',async()=>{
  const {pool,db}=await setup();const app=createApp({db,password:'secret',publicOrigin:'https://example.com'});await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+app.address().port;
  try{assert.equal((await fetch(origin+'/healthz')).status,200);assert.match(await (await fetch(origin+'/')).text(),/boot.js/);assert.match((await fetch(origin+'/app.js')).headers.get('content-type'),/javascript/);assert.equal((await fetch(origin+'/package.json')).status,404);assert.equal((await fetch(origin+'/%2e%2e%2fpackage.json')).status,403);
- const response=await fetch(origin+'/api/admin/catalog',{method:'PUT',headers:{Origin:'https://example.com',Authorization:'Bearer secret','Content-Type':'application/json'},body:JSON.stringify({revision:0,banks:{intro:[WORDS[0]]}})});assert.equal(response.status,200);
+ const response=await fetch(origin+'/api/admin/catalog',{method:'PUT',headers:{Origin:'https://example.com',Authorization:'Bearer secret','Content-Type':'application/json'},body:JSON.stringify({revision:0,banks:{intro:[WORDS[0]]}})});assert.equal(response.status,403);
+ const defaults=await fetch(origin+'/api/admin/catalog?course=toefl&module=intro',{headers:{Authorization:'Bearer secret'}});assert.equal(defaults.headers.get('content-encoding'),'gzip');assert.equal((await defaults.json()).banks.intro.length,6974);
  assert.equal((await fetch(origin+'/api/admin/catalog')).status,401);
  }finally{await new Promise(resolve=>app.close(resolve));await pool.end();}
 });

@@ -26,7 +26,8 @@ export const DEFAULT_MODULE_BANKS={intro:DEFAULT_WORDS.slice(0,5),recognize:DEFA
 export const catalogState={banks:typeof window!=='undefined'&&window.wordIslandPublished?Object.fromEntries(Object.entries(window.wordIslandPublished).map(([k,v])=>[k,Array.isArray(v)&&!v.length?[]:validateWords(v)])):{},error:typeof window!=='undefined'?window.wordIslandCatalogError:null};
 export const MODULE_BANKS=catalogState.banks;
 if(typeof window!=='undefined'&&window.wordIslandAccount)WORDS.length=0;
-for(const words of Object.values(MODULE_BANKS))for(const word of words)if(!WORDS.some(w=>w.id===word.id))WORDS.push(word);
+const wordIds=new Set(WORDS.map(word=>word.id));
+for(const words of Object.values(MODULE_BANKS))for(const word of words)if(!wordIds.has(word.id)){WORDS.push(word);wordIds.add(word.id);}
 export const WORD_MAP = Object.fromEntries(WORDS.map(word=>[word.id,word]));
 export const THEMES = {
   explore:{name:'探索世界',caption:'Beyond the familiar.',image:'assets/explore.svg'},

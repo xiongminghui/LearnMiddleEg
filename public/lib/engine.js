@@ -40,7 +40,8 @@ export function createSession(words,progress,now=Date.now(),practiceId=null) {
 export function createModuleSession(banks,progress,kind=null,now=Date.now()) {
   const queue=[];
   for(const [module,words] of Object.entries(banks))if(!kind||kind===module){
-    const ordered=[...dueWords(words,progress,now),...words.filter(w=>!progress[w.id]),...words.filter(w=>progress[w.id]&&progress[w.id].dueAt>now)];
+    const fresh=words.filter(w=>!progress[w.id]),due=dueWords(words,progress,now);
+    const ordered=[...(module==='intro'?[...fresh,...due]:[...due,...fresh]),...words.filter(w=>progress[w.id]&&progress[w.id].dueAt>now)];
     for(const w of ordered.slice(0,kind?10:3))queue.push(task(w.id,module));
   }
   const ids=[...new Set(queue.map(t=>t.wordId))];

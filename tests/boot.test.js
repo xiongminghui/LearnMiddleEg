@@ -62,3 +62,10 @@ test('signed-out learners see the assigned-account login without requesting a pr
  let called=false;const {context,main}=await runBoot(async()=>{called=true;return json({banks:{}});},{signedIn:false});
  assert.equal(called,false);assert.equal(context.appStarted,false);assert.match(main.innerHTML,/账号由管理员分配/);
 });
+
+
+test('a compact built-in catalog populates all four modules on old browser APIs',async()=>{
+ const {context}=await runBoot(async()=>json({allModules:true,words:DEFAULT_MODULE_BANKS.intro,revision:1}));
+ assert.equal(context.appStarted,true);assert.deepEqual(Object.keys(context.window.wordIslandPublished),['intro','recognize','spell','listen']);
+ for(const words of Object.values(context.window.wordIslandPublished))assert.equal(words.length,5);
+});

@@ -10,6 +10,7 @@ async function getWithRetry(path,options={}){
  }
 }
 function publishedBanks(payload){
+ if(payload?.allModules===true){const words=validateWords(payload.words);return Object.fromEntries(Object.keys(MODULES).map(kind=>[kind,words]));}
  if(!payload?.banks||typeof payload.banks!=='object'||Array.isArray(payload.banks))throw Error('共享词库格式不正确。');
  return Object.fromEntries(Object.entries(payload.banks).map(([kind,words])=>{if(!hasOwn(MODULES,kind))throw Error('共享词库包含未知模块。');return [kind,Array.isArray(words)&&!words.length?[]:validateWords(words)];}));
 }
@@ -28,7 +29,7 @@ function showLogin(){
 }
 function showCourses(identity){
  document.body.classList.add('account-gate');
- $('main').innerHTML=`<section class="welcome"><div><div class="eyebrow">YOUR LEARNING PATHS</div><h1>${esc(identity.user.displayName)}，选择学习方向。</h1><p>这里显示管理员分配给你的词库，每个方向分别保存学习进度。</p></div><button class="secondary" id="picker-logout">退出登录</button></section><section class="module-grid">${identity.courses.map(course=>`<article class="module-card"><h2>${esc(course.title)}</h2><p>${course.wordCount?course.wordCount+' 个单词 · 四个独立学习模块':'管理员尚未导入词库，请稍后再来。'}</p>${course.wordCount?`<a class="primary course-link" href="/?course=${encodeURIComponent(course.id)}">进入学习</a>`:'<span class="muted">等待词库发布</span>'}</article>`).join('')||'<section class="panel"><p>尚未分配学习方向，请联系管理员。</p></section>'}</section>`;
+ $('main').innerHTML=`<section class="welcome"><div><div class="eyebrow">YOUR LEARNING PATHS</div><h1>${esc(identity.user.displayName)}，选择学习方向。</h1><p>这里显示管理员分配给你的词库，每个方向分别保存学习进度。</p></div><button class="secondary" id="picker-logout">退出登录</button></section><section class="module-grid">${identity.courses.map(course=>`<article class="module-card"><span class="tag">${course.kind==='builtin'?'内置默认':'自定义方向'}</span><h2>${esc(course.title)}</h2><p>${course.wordCount?course.wordCount+' 个词条 · 四个独立学习模块':'管理员尚未导入词库，请稍后再来。'}</p>${course.kind==='builtin'?`<small class="muted">${course.id==='high-school'?'通用高考词表，北师大教材另设方向。':'开源备考参考词表。'} <a href="/data-sources.html">词库范围与来源</a></small>`:''}${course.wordCount?`<a class="primary course-link" href="/?course=${encodeURIComponent(course.id)}">进入学习</a>`:'<span class="muted">等待词库发布</span>'}</article>`).join('')||'<section class="panel"><p>尚未分配学习方向，请联系管理员。</p></section>'}</section>`;
  $('picker-logout').onclick=async()=>{try{await requestJSON('/api/auth/logout',{method:'POST'});location.replace('/');}catch(error){showFailure(error.message);}};
 }
 async function start(){

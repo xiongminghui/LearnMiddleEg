@@ -1,0 +1,2 @@
+ALTER TABLE study_courses ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'custom';
+ALTER TABLE study_courses ADD COLUMN IF NOT EXISTS builtin_version TEXT;

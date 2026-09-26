@@ -6,7 +6,7 @@ import {normalizeProfile,createProfile} from '../public/lib/store.js';
 import worker from '../worker/index.js';
 test('CSV handles BOM, commas, escaped quotes and multiline fields',()=>{
  const rows=parseImport('\uFEFFword,ipa,meaning,definition,sentence,translation\r\napple,/apple/,苹果,"A fruit, often red.","An apple is a ""fruit"".\nI like it.",一个苹果。','words.csv');assert.equal(rows[0].id,'apple');assert.match(rows[0].sentence,/"fruit"/);assert.match(rows[0].sentence,/\n/);
- assert.throws(()=>validateWords([WORDS[0],WORDS[0]]),/重复/);assert.throws(()=>validateWords([{...WORDS[0],definition:''}]),/definition/);assert.throws(()=>validateWords([{...WORDS[0],id:'<script>'}]),/英文单词/);
+ assert.throws(()=>validateWords([WORDS[0],WORDS[0]]),/重复/);assert.throws(()=>validateWords([{...WORDS[0],meaning:''}]),/meaning/);assert.throws(()=>validateWords([{...WORDS[0],id:'<script>'}]),/英文单词/);
 });
 test('module queues and retries stay within their own bank and exercise type',()=>{
  const p=createProfile();p.session=createModuleSession({spell:[WORDS[0],WORDS[1]],listen:[WORDS[2]]},p.progress,'spell');assert.ok(p.session.queue.every(t=>t.kind==='spell'&&['explore','challenge'].includes(t.wordId)));p.progress.protect=initialProgress(Date.now());recordAnswer(p,'wrong');assert.ok(p.session.queue.every(t=>t.kind==='spell'&&['explore','challenge'].includes(t.wordId)));

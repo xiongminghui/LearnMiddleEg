@@ -4,7 +4,7 @@
 <body>
 <header class="site-header"><div class="header-inner"><a href="/" class="brand">词屿 · 管理后台</a><a href="/">返回学习</a></div></header>
 <main class="main">
-<h1>分配账号，安排每个人的学习方向。</h1><p class="muted">先发布词库，再创建账号并勾选可学习的方向。学生使用分配的账号登录。</p>
+<h1>分配账号，安排每个人的学习方向。</h1><p class="muted">内置默认词库可以直接分配；自己导入的词汇放到自定义方向，再勾选分配给账号。</p>
 <section id="login-panel" class="panel account-login"><h2>管理员登录</h2><form id="login-form"><label for="admin-password">管理员密码</label><input id="admin-password" class="search-input" type="password" autocomplete="current-password" required maxlength="256"><button class="primary">登录</button></form></section>
 <p id="admin-status" role="status" aria-live="polite"></p>
 <section id="editor" hidden>
@@ -23,10 +23,11 @@
 <section class="panel"><div class="section-heading"><h2>已分配账号</h2><button class="text-button" id="accounts-refresh">刷新</button></div><label class="sr-only" for="account-search">搜索账号或姓名</label><input id="account-search" class="search-input" type="search" placeholder="搜索账号或姓名"><div id="account-list" class="account-list"></div></section>
 </div></section>
 <section id="catalog-panel" hidden>
+<section class="panel course-creator"><h2>新建自定义学习方向</h2><p>自己导入的单词保存在自定义方向中。内置默认词库始终保留，也可复制一份后自行调整。</p><form id="course-form" class="account-form"><label for="new-course-title">方向名称</label><input id="new-course-title" class="search-input" required maxlength="80" placeholder="例如：高一听力重点词 / 我的雅思易错词"><label for="new-course-source">初始内容</label><select id="new-course-source" class="search-input"><option value="">空白方向，稍后导入</option></select><button class="primary" id="create-course" type="submit">创建自定义方向</button><p id="course-message" role="status"></p></form></section>
 <div class="library-controls"><label>学习方向 <select id="course-select" class="search-input"></select></label><label>学习模块 <select id="module-select" class="search-input"><option value="intro">1 · 单词认知</option><option value="recognize">2 · 英译中选择</option><option value="spell">3 · 中译英拼写</option><option value="listen">4 · 听音拼写</option></select></label></div>
-<section class="panel"><h2 id="bank-heading"></h2><p>支持 CSV（UTF-8）或 JSON。每次导入替换所选学习方向下的当前模块。</p>
+<section class="panel"><h2 id="bank-heading"></h2><p id="catalog-note"></p><p><a href="/data-sources.html" target="_blank" rel="noopener">查看默认词库范围、版本与来源</a> <button id="copy-course" class="text-button">复制为自定义方向</button></p>
 <div class="dialog-actions"><button id="template-csv" class="secondary">下载 CSV 模板</button><button id="template-json" class="secondary">下载 JSON 模板</button><button id="export-bank" class="secondary">导出当前词库</button></div>
-<p class="settings-note">必填列：word、ipa、meaning、definition、sentence、translation。可选：pos、theme、family、note、memory、audioUrl。audioUrl 为单词录音直链（HTTPS），留空则使用设备合成语音。每模块最多 1000 词，文件上限 1 MB。空词库表示尚未发布内容。</p>
+<p class="settings-note">必填列：word、meaning。建议补全 ipa、definition、sentence、translation；缺失内容会标为待补充。其他可选列：pos、theme、family、note、memory、audioUrl、source、attribution。audioUrl 为单词录音直链（HTTPS），留空则使用设备合成语音。每模块最多 20000 词，文件上限 8 MB。导入只替换当前自定义方向的当前模块。</p>
 <p><label class="primary">选择导入文件<input id="bank-file" type="file" accept=".csv,.json,text/csv,application/json" class="sr-only"></label></p><p id="preview-note"></p>
 <div class="table-wrap"><table class="history-table"><thead><tr><th>单词 / 音标</th><th>中文释义</th><th>英文释义</th><th>英文例句</th><th>单词录音</th></tr></thead><tbody id="preview-rows"></tbody></table></div>
 <div class="dialog-actions"><button id="publish" class="primary" disabled>发布当前模块</button><button id="discard" class="secondary" disabled>取消本次导入</button></div>

@@ -1,6 +1,7 @@
 export const MODULES={intro:'单词认知',recognize:'英译中选择',spell:'中译英拼写',listen:'听音拼写'};
 export const CATALOG_KEY='word-island-module-banks-v1';
-const FIELDS=['id','ipa','meaning','definition','sentence','translation','pos','theme','family','note','memory','audioUrl'];
+const FIELDS=['id','ipa','meaning','definition','sentence','translation','pos','theme','family','note','memory','audioUrl','source','attribution'];
+export const validWordId=id=>typeof id==='string'&&id.length<=60&&/^[a-z]+(?:[ .'-][a-z]+)*\.?$/.test(id);
 function validAudioURL(value){
  if(!value)return true;
  if(/[\\\s]/.test(value))return false;
@@ -14,16 +15,16 @@ export function parseCSV(text){
  return rows.map((r,i)=>{if(r.length!==headers.length)throw Error(`第 ${i+2} 行列数不正确`);return Object.fromEntries(headers.map((h,j)=>[h,r[j]]));});
 }
 export function validateWords(rows){
- if(!Array.isArray(rows)||!rows.length||rows.length>1000)throw Error('每个模块请导入 1–1000 个单词');
+ if(!Array.isArray(rows)||!rows.length||rows.length>20000)throw Error('每个模块请导入 1–20000 个单词');
  const ids=new Set();return rows.map((r,i)=>{
   if(!r||typeof r!=='object')throw Error(`第 ${i+1} 条不是单词对象`);
   const w=Object.fromEntries(FIELDS.map(k=>[k,typeof r[k]==='string'?r[k].trim():'']));w.id=(w.id||String(r.word||'')).toLowerCase();
-  if(!/^[a-z]+(?:[-'][a-z]+)*$/.test(w.id)||w.id.length>60)throw Error(`第 ${i+1} 条：word / id 必须是英文单词`);
+  if(!validWordId(w.id))throw Error(`第 ${i+1} 条：word / id 必须是英文单词、缩写或词组`);
   if(ids.has(w.id))throw Error(`单词 ${w.id} 重复`);ids.add(w.id);
-  for(const k of ['ipa','meaning','definition','sentence','translation'])if(!w[k])throw Error(`${w.id} 缺少 ${k}`);
+  if(!w.meaning)throw Error(`${w.id} 缺少 meaning`);
   if(FIELDS.some(k=>w[k].length>1200))throw Error(`${w.id} 的字段过长`);
   if(!validAudioURL(w.audioUrl))throw Error(`${w.id} 的 audioUrl 需要 HTTPS 音频直链或 /audio/ 开头的本站音频路径`);
-  if(!new RegExp(`\\b${w.id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`,'i').test(w.sentence))throw Error(`${w.id} 的英文例句需要包含该单词`);
+  if(w.sentence&&!new RegExp(`(?:^|[^a-z])${w.id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(?![a-z])`,'i').test(w.sentence))throw Error(`${w.id} 的英文例句需要包含该单词`);
   w.pos||='';w.theme=['explore','challenge','protect'].includes(w.theme)?w.theme:'explore';return w;
  });
 }

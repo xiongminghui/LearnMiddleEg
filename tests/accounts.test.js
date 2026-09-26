@@ -20,15 +20,16 @@ async function setup(legacy=false){
  return {pool,db,call,create,login};
 }
 
-test('migration preserves the existing high-school catalog and is safe to rerun',async()=>{
+test('migration installs protected defaults and archives prior imports without overwriting them on restart',async()=>{
  const s=await setup(true);try{
-  const migrated=await (await s.call('/api/admin/catalog?course=high-school',{asAdmin:true})).json();
+  const current=await (await s.call('/api/admin/catalog?course=high-school',{asAdmin:true})).json();
+  assert.equal(current.course.kind,'builtin');assert.equal(current.words.length,3677);assert.equal(current.allModules,true);
+  const legacy='custom-legacy-high-school';const migrated=await (await s.call('/api/admin/catalog?course='+legacy,{asAdmin:true})).json();
   assert.equal(migrated.revision,3);assert.equal(migrated.banks.intro.length,2);
-  await s.db.prepare('UPDATE study_courses SET banks_json=?,revision=4 WHERE id=?').bind(JSON.stringify({intro:DEFAULT_MODULE_BANKS.intro}),'high-school').run();
+  await s.db.prepare('UPDATE study_courses SET banks_json=?,revision=4 WHERE id=?').bind(JSON.stringify({intro:DEFAULT_MODULE_BANKS.intro}),legacy).run();
   await migrate(s.pool);
-  const response=await s.call('/api/admin/catalog?course=high-school',{asAdmin:true}),data=await response.json();
-  assert.equal(data.revision,4);assert.equal(data.banks.intro.length,5);
-  const courses=await (await s.call('/api/admin/courses',{asAdmin:true})).json();assert.equal(courses.courses.length,5);assert.equal(courses.courses.find(c=>c.id==='ielts').wordCount,0);
+  const data=await (await s.call('/api/admin/catalog?course='+legacy,{asAdmin:true})).json();assert.equal(data.revision,4);assert.equal(data.banks.intro.length,5);
+  const courses=await (await s.call('/api/admin/courses',{asAdmin:true})).json();assert.equal(courses.courses.filter(c=>c.kind==='builtin').length,5);assert.equal(courses.courses.find(c=>c.id==='ielts').wordCount,5040);
  }finally{await s.pool.end();}
 });
 
@@ -52,7 +53,7 @@ test('course catalogs and progress are isolated by account and grant, with revis
   assert.equal((await s.call('/api/courses/ielts/catalog',{cookie:alice})).status,403);
   assert.equal((await s.call('/api/courses/cet4/catalog',{cookie:bob})).status,403);
   assert.equal((await s.call('/api/catalog')).status,401);
-  const empty=await (await s.call('/api/courses/cet4/catalog',{cookie:alice})).json();assert.ok(Object.values(empty.banks).every(words=>words.length===0));
+  const preset=await (await s.call('/api/courses/cet4/catalog',{cookie:alice})).json();assert.equal(preset.words.length,3849);
   const path='/api/courses/high-school/progress';
   for(const cookie of [alice,bob])assert.equal((await (await s.call(path,{cookie})).json()).revision,0);
   const profile=createProfile();profile.progress.explore=initialProgress(Date.now());
@@ -66,11 +67,14 @@ test('course catalogs and progress are isolated by account and grant, with revis
   // A stale Alice tab must not write into Bob's account after a shared cookie changes.
   assert.equal((await s.call(path,{method:'PUT',cookie:bob,learnerId:aliceId,body:{revision:0,profile}})).status,401);
   assert.equal((await (await s.call(path,{cookie:bob})).json()).profile,null);
-  const published=await s.call('/api/admin/catalog?course=cet4',{asAdmin:true,method:'PUT',body:{revision:0,banks:{intro:DEFAULT_MODULE_BANKS.intro,recognize:[],spell:[],listen:[]}}});
-  assert.equal(published.status,200);
-  assert.equal((await (await s.call('/api/courses/cet4/catalog',{cookie:alice})).json()).banks.spell.length,0);
-  assert.deepEqual((await (await s.call('/api/courses/high-school/catalog',{cookie:alice})).json()).banks.spell,DEFAULT_MODULE_BANKS.spell);
-  assert.equal((await s.call('/api/admin/catalog?course=cet4',{asAdmin:true,method:'PUT',body:{revision:0,banks:{}}})).status,409);
+  const blocked=await s.call('/api/admin/catalog?course=cet4',{asAdmin:true,method:'PUT',body:{revision:1,module:'intro',words:DEFAULT_MODULE_BANKS.intro}});assert.equal(blocked.status,403);
+  const created=await s.call('/api/admin/courses',{asAdmin:true,method:'POST',body:{title:'自定义四级'}});assert.equal(created.status,201);const custom=(await created.json()).course.id;
+  const published=await s.call('/api/admin/catalog?course='+custom,{asAdmin:true,method:'PUT',body:{revision:0,module:'intro',words:DEFAULT_MODULE_BANKS.intro}});assert.equal(published.status,200);
+  const customBank=await (await s.call('/api/admin/catalog?course='+custom,{asAdmin:true})).json();assert.equal(customBank.banks.intro.length,5);assert.equal(customBank.banks.spell.length,0);
+  assert.equal((await (await s.call('/api/courses/cet4/catalog',{cookie:alice})).json()).words.length,3849);
+  assert.equal((await s.call('/api/courses/'+custom+'/catalog',{cookie:alice})).status,403);
+  assert.equal((await s.call('/api/admin/catalog?course='+custom,{asAdmin:true,method:'PUT',body:{revision:0,module:'spell',words:DEFAULT_MODULE_BANKS.spell}})).status,409);
+
  }finally{await s.pool.end();}
 });
 
@@ -86,5 +90,18 @@ test('password reset and disabling revoke sessions while retaining saved learnin
   assert.equal((await s.call('/api/auth/login',{method:'POST',body:{username:'alice',password:'new-password-123'}})).status,401);
   assert.equal((await change({active:true,courses:[]})).status,200);cookie=await s.login('alice','new-password-123');assert.equal((await s.call('/api/courses/high-school/progress',{cookie})).status,403);
   assert.equal((await s.call('/api/auth/logout',{method:'POST',cookie})).status,200);assert.equal((await s.call('/api/auth/me',{cookie})).status,401);
+ }finally{await s.pool.end();}
+});
+
+test('cloning a default creates independently editable modules and can be assigned alongside all five defaults',async()=>{
+ const s=await setup();try{
+  assert.equal((await s.call('/api/admin/courses',{method:'POST',body:{title:'not admin'}})).status,401);
+  const response=await s.call('/api/admin/courses',{method:'POST',asAdmin:true,body:{title:'我的雅思听力',copyFrom:'ielts'}});assert.equal(response.status,201);const id=(await response.json()).course.id;
+  let catalog=await (await s.call('/api/admin/catalog?course='+id,{asAdmin:true})).json();assert.ok(Object.values(catalog.banks).every(words=>words.length===5040));
+  const edit=await s.call('/api/admin/catalog?course='+id,{method:'PUT',asAdmin:true,body:{revision:0,module:'listen',words:DEFAULT_MODULE_BANKS.listen}});assert.equal(edit.status,200);
+  catalog=await (await s.call('/api/admin/catalog?course='+id,{asAdmin:true})).json();assert.equal(catalog.banks.listen.length,4);assert.equal(catalog.banks.intro.length,5040);
+  assert.equal((await (await s.call('/api/admin/catalog?course=ielts',{asAdmin:true})).json()).words.length,5040);
+  await s.create('alice',['high-school','cet4','cet6','ielts','toefl',id]);const cookie=await s.login('alice');assert.equal((await s.call('/api/courses/'+id+'/catalog',{cookie})).status,200);
+  await migrate(s.pool);assert.equal((await (await s.call('/api/admin/catalog?course='+id,{asAdmin:true})).json()).banks.listen.length,4);
  }finally{await s.pool.end();}
 });
