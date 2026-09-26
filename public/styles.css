@@ -25,3 +25,5 @@ dialog.dialog-fallback{position:fixed;top:50%;left:50%;right:auto;bottom:auto;tr
 .definition-actions{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 18px}.definition-actions [aria-expanded="true"]{background:var(--mint);border-color:var(--green);color:var(--green)}
 
 .audio-source{font-size:.75rem;color:var(--muted);margin:0 0 16px}
+
+.feedback-word{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:100%;vertical-align:middle}.feedback-ipa{color:var(--muted);font-weight:400}
