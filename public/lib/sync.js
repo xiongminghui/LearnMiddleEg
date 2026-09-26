@@ -1,10 +1,9 @@
 import { deviceToken } from './store.js';
+import { requestJSON } from './request.js';
 export function createSync(getProfile,persist,onStatus){
   let available=false,busy=false;
   async function request(path,options={}){
-    const response=await fetch(path,{...options,signal:AbortSignal.timeout(8000)});
-    if(!response.ok||!response.headers.get('content-type')?.includes('application/json'))throw new Error('Unavailable');
-    return response.json();
+    return requestJSON(path,options);
   }
   async function flush(){
     if(!available||busy)return;const events=getProfile().pendingEvents.slice(0,40);

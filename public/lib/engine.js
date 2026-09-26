@@ -1,8 +1,9 @@
 /** Pure learning/session state transitions. No DOM, network, or browser storage. */
+import {cloneState,uuid} from './compat.js';
+export {uuid};
 export const INTERVAL_DAYS = [1,3,7,14,30];
 export const DAY = 86400000;
 export const MAX_STEPS = 48;
-export const uuid = () => crypto.randomUUID();
 export function dayKey(time=Date.now()) {
   const d=new Date(time);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
@@ -34,7 +35,7 @@ export function createSession(words,progress,now=Date.now(),practiceId=null) {
   const ids=[...new Set(queue.map(t=>t.wordId))];
   return {id:uuid(),mode:plan.mode,createdAt:now,index:0,queue,answers:[],feedback:null,finishedAt:null,
     freshIds:plan.fresh.filter(w=>!progress[w.id]).map(w=>w.id),reviewIds:plan.reviews.map(w=>w.id),
-    baseline:Object.fromEntries(ids.map(id=>[id,progress[id]?structuredClone(progress[id]):null]))};
+    baseline:Object.fromEntries(ids.map(id=>[id,progress[id]?cloneState(progress[id]):null]))};
 }
 export function createModuleSession(banks,progress,kind=null,now=Date.now()) {
   const queue=[];
@@ -43,7 +44,7 @@ export function createModuleSession(banks,progress,kind=null,now=Date.now()) {
     for(const w of ordered.slice(0,kind?10:3))queue.push(task(w.id,module));
   }
   const ids=[...new Set(queue.map(t=>t.wordId))];
-  return {id:uuid(),mode:'practice',moduleKind:kind||'all',createdAt:now,index:0,queue,answers:[],feedback:null,finishedAt:null,freshIds:ids.filter(id=>!progress[id]),reviewIds:ids.filter(id=>progress[id]),baseline:Object.fromEntries(ids.map(id=>[id,progress[id]?structuredClone(progress[id]):null]))};
+  return {id:uuid(),mode:'practice',moduleKind:kind||'all',createdAt:now,index:0,queue,answers:[],feedback:null,finishedAt:null,freshIds:ids.filter(id=>!progress[id]),reviewIds:ids.filter(id=>progress[id]),baseline:Object.fromEntries(ids.map(id=>[id,progress[id]?cloneState(progress[id]):null]))};
 }
 export const currentTask = session => session?.queue[session.index] || null;
 export function choicesFor(task,words) {
@@ -74,7 +75,7 @@ export function recordAnswer(profile,response,{assisted=false,skip=false,now=Dat
       const other=s.moduleKind?s.queue.filter(q=>q.kind===t.kind&&q.wordId!==t.wordId).map(q=>q.wordId):Object.keys(profile.progress).filter(id=>id!==t.wordId);
       for(let i=0;i<2-remaining&&other.length;i++) {
         const id=other[i%other.length];gap.push(task(id,s.moduleKind?t.kind:i%2?'listen':'recognize',2));
-        if(!(id in s.baseline))s.baseline[id]=structuredClone(profile.progress[id]);
+        if(!(id in s.baseline))s.baseline[id]=cloneState(profile.progress[id]);
       }
     }
     if(remaining+gap.length>=2&&s.queue.length+gap.length+1<=MAX_STEPS) {

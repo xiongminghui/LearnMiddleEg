@@ -1,10 +1,11 @@
 import {MODULES,parseImport} from './lib/catalog.js';
+import {requestJSON} from './lib/request.js';
 import {DEFAULT_WORDS,DEFAULT_MODULE_BANKS} from './data/words.js';
 const $=id=>document.getElementById(id);
 let token='',banks={},revision=0,draft=null,busy=false;
 const current=()=>$('module-select').value;
 const status=(text,error=false)=>{$('admin-status').textContent=text;$('admin-status').style.color=error?'#9a542c':'#176753';};
-async function api(method='GET',body){const response=await fetch('/api/admin/catalog',{method,headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(15000)});let data;try{data=await response.json();}catch{throw Error('此站点没有可用的管理接口，请使用 Render + PostgreSQL 部署版本。');}if(!response.ok)throw Error(data.error||'请求失败');return data;}
+async function api(method='GET',body){return requestJSON('/api/admin/catalog',{method,headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,timeoutMs:30000});}
 function render(){const words=draft||banks[current()]||DEFAULT_MODULE_BANKS[current()];$('bank-heading').textContent=MODULES[current()]+' · '+words.length+' 词';$('preview-note').textContent=draft?'待发布预览（尚未修改线上词库）':'已发布词库'+(!banks[current()]?'（使用内置示例）':'')+' · 版本 '+revision;$('preview-rows').replaceChildren();for(const w of words){const tr=document.createElement('tr');for(const value of [w.id+' '+w.ipa,w.meaning,w.definition,w.sentence]){const td=document.createElement('td');td.textContent=value;tr.append(td);}$('preview-rows').append(tr);}$('publish').disabled=!draft||busy;$('discard').disabled=!draft||busy;}
 function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 $('login-form').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;busy=true;token=$('admin-password').value;status('正在验证管理员身份…');try{const data=await api();banks=data.banks;revision=data.revision;$('admin-password').value='';$('login-panel').hidden=true;$('editor').hidden=false;draft=null;render();status('已登录，可以独立管理四个模块。');}catch(e){token='';status(e.message,true);}finally{busy=false;}});
