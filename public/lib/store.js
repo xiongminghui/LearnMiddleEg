@@ -2,6 +2,7 @@ import { WORD_MAP } from '../data/words.js';
 import {hasOwn,cloneState} from './compat.js';
 import { validEvent,validId } from './protocol.js';
 import { initialProgress } from './engine.js';
+import {REVIEW_KINDS,REVIEW_INTERVALS,upgradeProgress} from './review.js';
 import {MODULES} from './catalog.js';
 import {rememberSession} from './sessions.js';
 import {profileKey,selectAccountState,writeSyncState} from './account-state.js';
@@ -9,7 +10,8 @@ const account=typeof window!=='undefined'?window.wordIslandAccount:null;
 export const STORAGE_KEY=profileKey(account);
 export function createProfile(){return {version:1,progress:{},session:null,sessions:{},history:[],pendingEvents:[],preferences:{autoAdvance:true},favorites:[]};}
 const finiteTime=n=>Number.isFinite(n)&&n>=0&&n<=8640000000000000;
-function validProgress(p){return p&&finiteTime(p.introducedAt)&&finiteTime(p.dueAt)&&Number.isInteger(p.stage)&&p.stage>=0&&p.stage<=5&&Number.isInteger(p.lapses)&&p.lapses>=0&&p.skills&&['recognize','spell','listen'].every(k=>Number.isInteger(p.skills[k])&&p.skills[k]>=0&&p.skills[k]<=20);}
+function validReview(r){return r&&Number.isInteger(r.stage)&&r.stage>=0&&r.stage<=REVIEW_INTERVALS.length&&finiteTime(r.dueAt)&&(r.lastReviewedAt===null||finiteTime(r.lastReviewedAt))&&Number.isInteger(r.lapses)&&r.lapses>=0;}
+function validProgress(p){return p&&finiteTime(p.introducedAt)&&finiteTime(p.dueAt)&&Number.isInteger(p.stage)&&p.stage>=0&&p.stage<=(p.reviews===undefined?5:REVIEW_INTERVALS.length)&&Number.isInteger(p.lapses)&&p.lapses>=0&&p.skills&&REVIEW_KINDS.every(k=>Number.isInteger(p.skills[k])&&p.skills[k]>=0&&p.skills[k]<=20)&&(p.introAt===undefined||p.introAt===null||finiteTime(p.introAt))&&(p.reviews===undefined||(p.reviews&&typeof p.reviews==='object'&&!Array.isArray(p.reviews)&&Object.entries(p.reviews).every(([kind,r])=>REVIEW_KINDS.includes(kind)&&validReview(r))));}
 const known=id=>typeof id==='string'&&hasOwn(WORD_MAP,id);
 function validSession(s,knownWord=known){
   return s&&validId(s.id)&&['guided','practice','reinforce'].includes(s.mode)&&finiteTime(s.createdAt)&&Array.isArray(s.queue)&&s.queue.length>0&&s.queue.length<=48&&s.queue.every(t=>validId(t.id)&&knownWord(t.wordId)&&['intro','recognize','spell','listen'].includes(t.kind)&&Number.isInteger(t.attempt)&&t.attempt>=0&&t.attempt<=2)&&(s.moduleKind===undefined||s.moduleKind==='all'||(hasOwn(MODULES,s.moduleKind)&&s.queue.every(t=>t.kind===s.moduleKind)))&&Number.isInteger(s.index)&&s.index>=0&&s.index<=s.queue.length&&Array.isArray(s.answers)&&s.answers.length<=48&&s.answers.every(a=>validId(a.taskId)&&knownWord(a.wordId)&&['intro','recognize','spell','listen'].includes(a.kind)&&typeof a.independent==='boolean'&&typeof a.correct==='boolean'&&finiteTime(a.at))&&Array.isArray(s.freshIds)&&s.freshIds.every(knownWord)&&Array.isArray(s.reviewIds)&&s.reviewIds.every(knownWord)&&s.baseline&&Object.entries(s.baseline).every(([id,p])=>knownWord(id)&&(p===null||validProgress(p)))&&(s.finishedAt===null||finiteTime(s.finishedAt))&&(s.feedback===null||(s.index<s.queue.length&&s.feedback.taskId===s.queue[s.index].id&&typeof s.feedback.correct==='boolean'));
@@ -23,7 +25,7 @@ export function normalizeProfile(raw,wordMap=WORD_MAP){
   for(const p of Object.values(raw.progress))if(p?.skills&&p.skills.listen===undefined&&Number.isInteger(p.skills.cloze))p.skills.listen=0;
   if(raw.session?.queue?.some(t=>t.kind==='cloze'))raw.session=null;
   const profile=createProfile();
-  for(const [id,p] of Object.entries(raw.progress))if(known(id)&&validProgress(p))profile.progress[id]=cloneState(p);
+  for(const [id,p] of Object.entries(raw.progress))if(known(id)&&validProgress(p))profile.progress[id]=upgradeProgress(cloneState(p));
   profile.session=validSession(raw.session,known)?cloneState(raw.session):null;
   for(const kind of Object.keys(MODULES)){
     const session=raw.sessions?.[kind];
@@ -31,6 +33,7 @@ export function normalizeProfile(raw,wordMap=WORD_MAP){
   }
   // Migrate the former single active round and keep it linked to its module.
   rememberSession(profile);
+  for(const session of [profile.session,...Object.values(profile.sessions)])if(session)for(const p of Object.values(session.baseline))if(p)upgradeProgress(p);
   profile.history=Array.isArray(raw.history)?raw.history.filter(h=>h&&validId(h.id)&&finiteTime(h.at)&&['newCount','reviewCount','correct','total','retries'].every(k=>Number.isInteger(h[k])&&h[k]>=0)&&Array.isArray(h.weakIds)&&h.weakIds.every(known)&&Array.isArray(h.wordIds)&&h.wordIds.every(known)).slice(0,120):[];
   profile.pendingEvents=Array.isArray(raw.pendingEvents)?raw.pendingEvents.filter(validEvent):[];
   profile.favorites=Array.isArray(raw.favorites)?[...new Set(raw.favorites.filter(known))]:[];

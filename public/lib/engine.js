@@ -1,8 +1,8 @@
 /** Pure learning/session state transitions. No DOM, network, or browser storage. */
 import {cloneState,uuid} from './compat.js';
+import {DAY,RELEARN_INTERVAL,initialReview,moduleProgress,upgradeProgress,summarizeProgress,finishReview} from './review.js';
 export {uuid};
-export const INTERVAL_DAYS = [1,3,7,14,30];
-export const DAY = 86400000;
+export {DAY,stageLabel} from './review.js';
 export const MAX_STEPS = 48;
 export function dayKey(time=Date.now()) {
   const d=new Date(time);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -11,10 +11,11 @@ export function shuffle(values,random=Math.random) {
   const copy=[...values];for(let i=copy.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[copy[i],copy[j]]=[copy[j],copy[i]];}return copy;
 }
 export function initialProgress(now) {
-  return {introducedAt:now,dueAt:now,stage:0,lapses:0,skills:{recognize:0,spell:0,listen:0},lastReviewedAt:null};
+  return {introducedAt:now,dueAt:now,stage:0,lapses:0,skills:{recognize:0,spell:0,listen:0},lastReviewedAt:null,introAt:null,reviews:{}};
 }
-export function dueWords(words,progress,now=Date.now()) {
-  return words.filter(w=>progress[w.id]&&progress[w.id].dueAt<=now).sort((a,b)=>progress[a.id].dueAt-progress[b.id].dueAt||progress[b.id].lapses-progress[a.id].lapses);
+export function dueWords(words,progress,now=Date.now(),kind=null) {
+  const state=id=>kind?moduleProgress(progress[id],kind):progress[id];
+  return words.filter(w=>state(w.id)&&Number.isFinite(state(w.id).dueAt)&&state(w.id).dueAt<=now).sort((a,b)=>state(a.id).dueAt-state(b.id).dueAt||state(b.id).lapses-state(a.id).lapses);
 }
 export function planLesson(words,progress,now=Date.now(),practiceId=null) {
   if(practiceId) return {fresh:[words.find(w=>w.id===practiceId)].filter(Boolean),reviews:[],mode:'practice',newToday:0};
@@ -40,12 +41,19 @@ export function createSession(words,progress,now=Date.now(),practiceId=null) {
 export function createModuleSession(banks,progress,kind=null,now=Date.now()) {
   const queue=[];
   for(const [module,words] of Object.entries(banks))if(!kind||kind===module){
-    const fresh=words.filter(w=>!progress[w.id]),due=dueWords(words,progress,now);
-    const ordered=[...(module==='intro'?[...fresh,...due]:[...due,...fresh]),...words.filter(w=>progress[w.id]&&progress[w.id].dueAt>now)];
+    const fresh=words.filter(w=>!moduleProgress(progress[w.id],module)),due=dueWords(words,progress,now,module);
+    const ready=module==='intro'?fresh:[...due,...fresh];
+    // Future words are only offered as explicitly labelled early practice when
+    // no new/due items remain. They never fill or displace a scheduled round.
+    const ordered=ready.length?ready:[...words].sort((a,b)=>{
+      const left=moduleProgress(progress[a.id],module),right=moduleProgress(progress[b.id],module);
+      return module==='intro'?left.lastReviewedAt-right.lastReviewedAt:left.dueAt-right.dueAt;
+    });
     for(const w of ordered.slice(0,kind?10:3))queue.push(task(w.id,module));
   }
   const ids=[...new Set(queue.map(t=>t.wordId))];
-  return {id:uuid(),mode:'practice',moduleKind:kind||'all',createdAt:now,index:0,queue,answers:[],feedback:null,finishedAt:null,freshIds:ids.filter(id=>!progress[id]),reviewIds:ids.filter(id=>progress[id]),baseline:Object.fromEntries(ids.map(id=>[id,progress[id]?cloneState(progress[id]):null]))};
+  const freshIds=ids.filter(id=>queue.some(t=>t.wordId===id&&!moduleProgress(progress[id],t.kind)));
+  return {id:uuid(),mode:'practice',moduleKind:kind||'all',createdAt:now,index:0,queue,answers:[],feedback:null,finishedAt:null,freshIds,reviewIds:ids.filter(id=>!freshIds.includes(id)),baseline:Object.fromEntries(ids.map(id=>[id,progress[id]?cloneState(progress[id]):null]))};
 }
 export const currentTask = session => session?.queue[session.index] || null;
 export function choicesFor(task,words) {
@@ -61,10 +69,14 @@ export function recordAnswer(profile,response,{assisted=false,skip=false,now=Dat
   const correct=isIntro||(!skip&&String(response).trim().toLowerCase()===t.wordId);
   const independent=!isIntro&&correct&&!assisted;
   const progress=profile.progress[t.wordId] ||= initialProgress(now);
-  if(!isIntro) {
+  upgradeProgress(progress);
+  if(isIntro)progress.introAt=now;
+  else {
+    const review=progress.reviews[t.kind] ||= initialReview(now);
     progress.lastReviewedAt=now;
     if(independent)progress.skills[t.kind]=Math.min(20,(progress.skills[t.kind]||0)+1);
-    else {progress.skills[t.kind]=0;progress.lapses++;progress.stage=0;progress.dueAt=now+600000;}
+    else {progress.skills[t.kind]=0;progress.lapses++;review.lapses++;review.stage=0;review.dueAt=now+RELEARN_INTERVAL;review.lastReviewedAt=now;}
+    summarizeProgress(progress);
   }
   const answer={taskId:t.id,wordId:t.wordId,kind:t.kind,attempt:t.attempt,correct,independent,assisted,skip,at:now};
   s.answers.push(answer);
@@ -100,20 +112,16 @@ export function finalizeSession(profile,now=Date.now()) {
   const s=profile.session;if(!s||s.finishedAt||s.index<s.queue.length)return;
   const graded=s.answers.filter(a=>a.kind!=='intro');
   for(const id of new Set(graded.map(a=>a.wordId))) {
-    const p=profile.progress[id],answers=graded.filter(a=>a.wordId===id),baseline=s.baseline[id];
-    const clean=answers.every(a=>a.independent);
-    if(!clean || !p.skills.spell || !p.skills.listen) {p.stage=0;p.dueAt=now+600000;}
-    else if(!baseline || baseline.dueAt<=s.createdAt) {
-      p.stage=Math.min(5,(baseline?.stage||0)+1);p.dueAt=now+INTERVAL_DAYS[p.stage-1]*DAY;
+    for(const kind of new Set(graded.filter(a=>a.wordId===id).map(a=>a.kind))){
+      const answers=graded.filter(a=>a.wordId===id&&a.kind===kind);
+      finishReview(profile.progress[id],kind,moduleProgress(s.baseline[id],kind),answers.every(a=>a.independent),s.createdAt,now);
     }
-    // Early successful practice preserves the existing interval and due date.
   }
   s.finishedAt=now;
   const first=graded.filter(a=>a.attempt===0);
-  const summary={id:s.id,at:now,mode:s.mode,newCount:s.freshIds.length,reviewCount:s.reviewIds.length,
+  const summary={id:s.id,at:now,mode:s.mode,moduleKind:s.moduleKind||'all',newCount:s.freshIds.length,reviewCount:s.reviewIds.length,
     correct:first.filter(a=>a.independent).length,total:first.length,retries:graded.length-first.length,
     weakIds:[...new Set(graded.filter(a=>!a.independent).map(a=>a.wordId))],wordIds:[...new Set(graded.map(a=>a.wordId))]};
   profile.history.unshift(summary);profile.history=profile.history.slice(0,120);
   profile.pendingEvents.push({id:uuid(),sessionId:s.id,wordId:null,eventType:'completed',exerciseType:null,result:null,assisted:false,occurredAt:now,latencyMs:0});
 }
-export function stageLabel(p){return !p?'未学习':p.stage===0?'学习中':p.stage===1?'初步记住':p.stage<4?'逐渐稳固':'长期巩固';}

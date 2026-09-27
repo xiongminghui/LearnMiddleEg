@@ -129,7 +129,7 @@ export function createAccountAPI({db,password}){
    await db.prepare('DELETE FROM student_sessions WHERE token_hash=?').bind(digest(tokenFrom(request))).run();
    return json({ok:true},200,{'Set-Cookie':cookie(request,'',0)});
   }
-  if(path==='/api/status'&&method==='GET')return json({storage:'postgres',version:3,accounts:true,builtinCatalogs:true});
+  if(path==='/api/status'&&method==='GET')return json({storage:'postgres',version:4,accounts:true,builtinCatalogs:true,reviewSchedule:'ebbinghaus-inspired-v1'});
   const account=await accountFor(request);if(!account)return json({error:'请使用管理员分配的账号登录。'},401);
   if(path==='/api/auth/me'&&method==='GET')return json({user:publicAccount(account),courses:(await assignedCourses(account)).map(courseInfo).sort(courseOrder)});
   const match=path.match(/^\/api\/courses\/([a-z0-9-]+)\/(catalog|progress)$/);

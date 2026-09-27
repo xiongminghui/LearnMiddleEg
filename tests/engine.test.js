@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {WORDS} from '../public/data/words.js';
 import {createProfile,normalizeProfile} from '../public/lib/store.js';
 import {createSession,recordAnswer,advanceSession,currentTask,initialProgress,planLesson,choicesFor,DAY,MAX_STEPS} from '../public/lib/engine.js';
+import {MINUTE} from '../public/lib/review.js';
 const now=new Date('2026-09-26T10:00:00Z').getTime();
 function begin(progress={},id=null){const p=createProfile();p.progress=progress;p.session=createSession(WORDS,progress,now,id);return p;}
 function allCorrect(p){let n=0;while(!p.session.finishedAt){assert.ok(n++<60);const t=currentTask(p.session);recordAnswer(p,t.wordId,{now:now+n*100});advanceSession(p,now+n*100);}return p;}
@@ -10,7 +11,7 @@ function allCorrect(p){let n=0;while(!p.session.finishedAt){assert.ok(n++<60);co
 test('first lesson is three words with introduction, recognition, spelling and listening',()=>{
  const p=begin();assert.equal(p.session.queue.length,12);assert.deepEqual(p.session.freshIds,['explore','challenge','protect']);
  assert.deepEqual(p.session.queue.map(t=>t.kind),['intro','intro','intro','recognize','recognize','recognize','spell','spell','spell','listen','listen','listen']);
- allCorrect(p);for(const id of p.session.freshIds){assert.equal(p.progress[id].stage,1);assert.equal(p.progress[id].dueAt,p.session.finishedAt+DAY);}
+ allCorrect(p);for(const id of p.session.freshIds){assert.equal(p.progress[id].stage,1);assert.equal(p.progress[id].dueAt,p.session.finishedAt+20*MINUTE);}
  assert.equal(p.history[0].correct,9);assert.equal(p.history[0].total,9);assert.equal(p.history.length,1);
  assert.equal(p.pendingEvents.filter(e=>e.eventType==='completed').length,1);
 });
@@ -21,8 +22,9 @@ test('daily new-word allowance persists and successful early practice does not a
 });
 test('due words precede new learning; due successful retrieval extends interval',()=>{
  const progress=initialProgress(now-DAY*2);progress.skills={recognize:1,spell:1,listen:1};progress.stage=1;progress.dueAt=now-1;
+ progress.reviews.spell={stage:1,dueAt:now-1,lastReviewedAt:now-DAY,lapses:0};
  const p=begin({explore:progress});assert.equal(p.session.queue[0].wordId,'explore');assert.equal(p.session.queue[0].kind,'spell');
- allCorrect(p);assert.equal(p.progress.explore.stage,2);assert.equal(p.progress.explore.dueAt,p.session.finishedAt+DAY*3);
+ allCorrect(p);assert.equal(p.progress.explore.reviews.spell.stage,2);assert.equal(p.progress.explore.reviews.spell.dueAt,p.session.finishedAt+60*MINUTE);
 });
 test('wrong answers are separated by at least two intervening tasks',()=>{
  const p=begin();for(let i=0;i<3;i++){recordAnswer(p,'seen',{now});advanceSession(p,now);}

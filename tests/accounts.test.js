@@ -6,7 +6,7 @@ import {createDatabase,migrate} from '../server/database.js';
 import {createAccountAPI} from '../server/accounts.js';
 import {createProfile} from '../public/lib/store.js';
 import {DEFAULT_MODULE_BANKS} from '../public/data/words.js';
-import {initialProgress} from '../public/lib/engine.js';
+import {initialProgress,createModuleSession,recordAnswer,advanceSession} from '../public/lib/engine.js';
 const origin='https://example.com',admin='local-admin-testing-only',password='student-test-password';
 async function setup(legacy=false){
  const memory=newDb({noAstCoverageCheck:true});memory.public.registerFunction({name:'length',args:['text'],returns:'integer',implementation:s=>s.length});
@@ -75,6 +75,27 @@ test('course catalogs and progress are isolated by account and grant, with revis
   assert.equal((await s.call('/api/courses/'+custom+'/catalog',{cookie:alice})).status,403);
   assert.equal((await s.call('/api/admin/catalog?course='+custom,{asAdmin:true,method:'PUT',body:{revision:0,module:'spell',words:DEFAULT_MODULE_BANKS.spell}})).status,409);
 
+ }finally{await s.pool.end();}
+});
+
+test('account sync round-trips separate review schedules, including stage nine and legacy migration',async()=>{
+ const s=await setup();try{
+  await s.create('schedule-user',['high-school']);const cookie=await s.login('schedule-user'),path='/api/courses/high-school/progress';
+  const status=await (await s.call('/api/status')).json();assert.equal(status.reviewSchedule,'ebbinghaus-inspired-v1');
+  await s.call(path,{cookie});const profile=createProfile(),word=DEFAULT_MODULE_BANKS.intro[0];let time=Date.now();
+  for(let i=0;i<9;i++){
+   profile.session=createModuleSession({listen:[word]},profile.progress,'listen',time);
+   recordAnswer(profile,word.id,{now:time});advanceSession(profile,time);time=profile.progress[word.id].reviews.listen.dueAt;
+  }
+  profile.session=createModuleSession({spell:[word]},profile.progress,'spell',time);
+  recordAnswer(profile,'wrong',{now:time});advanceSession(profile,time);
+  assert.equal((await s.call(path,{cookie,method:'PUT',body:{revision:0,profile}})).status,200);
+  const other=await s.login('schedule-user'),loaded=await (await s.call(path,{cookie:other})).json();
+  assert.deepEqual(loaded.profile.progress,profile.progress);assert.equal(loaded.profile.progress[word.id].reviews.listen.stage,9);assert.equal(loaded.profile.progress[word.id].reviews.spell.stage,0);
+  const old=createProfile();old.progress[word.id]={introducedAt:time,dueAt:time+86400000,stage:1,lapses:0,skills:{recognize:1,spell:0,listen:1},lastReviewedAt:time};
+  assert.equal((await s.call(path,{cookie:other,method:'PUT',body:{revision:1,profile:old}})).status,200);
+  const migrated=(await (await s.call(path,{cookie})).json()).profile.progress[word.id];
+  assert.equal(migrated.reviews.listen.dueAt,old.progress[word.id].dueAt);assert.equal(migrated.reviews.listen.stage,4);assert.equal(migrated.reviews.spell,undefined);
  }finally{await s.pool.end();}
 });
 
